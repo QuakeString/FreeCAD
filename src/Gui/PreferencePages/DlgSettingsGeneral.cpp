@@ -49,6 +49,7 @@
 #include <Gui/OverlayManager.h>
 #include <Gui/ParamHandler.h>
 #include <Gui/PreferencePackManager.h>
+#include <Gui/ThemeManager.h>
 #include <Gui/View3DInventor.h>
 #include <Gui/View3DInventorViewer.h>
 #include <Gui/Language/Translator.h>
@@ -61,6 +62,52 @@ using namespace Gui::Dialog;
 namespace fs = std::filesystem;
 using Base::QuantityFormat;
 using Base::UnitsApi;
+
+namespace
+{
+// The order of the entries of the theme mode combo box, as defined in the .ui file
+enum ThemeModeIndex
+{
+    SystemMode = 0,
+    LightMode = 1,
+    DarkMode = 2
+};
+
+int indexOfMode(ThemeMode mode)
+{
+    switch (mode) {
+        case ThemeMode::Light:
+            return LightMode;
+        case ThemeMode::Dark:
+            return DarkMode;
+        case ThemeMode::System:
+        default:
+            return SystemMode;
+    }
+}
+
+ThemeMode modeOfIndex(int index)
+{
+    switch (index) {
+        case LightMode:
+            return ThemeMode::Light;
+        case DarkMode:
+            return ThemeMode::Dark;
+        case SystemMode:
+        default:
+            return ThemeMode::System;
+    }
+}
+
+void selectTheme(QComboBox* combo, const std::string& themeName)
+{
+    const int index = combo->findText(QString::fromStdString(themeName));
+
+    if (index >= 0) {
+        combo->setCurrentIndex(index);
+    }
+}
+}  // namespace
 
 /* TRANSLATOR Gui::Dialog::DlgSettingsGeneral */
 
@@ -96,6 +143,8 @@ DlgSettingsGeneral::DlgSettingsGeneral(QWidget* parent)
                 ui->SaveNewPreferencePack->setEnabled(false);
                 ui->ManagePreferencePacks->setEnabled(false);
                 ui->themesCombobox->setEnabled(false);
+                ui->themesDarkCombobox->setEnabled(false);
+                ui->themeModeCombobox->setEnabled(false);
                 ui->moreThemesLabel->setEnabled(false);
             }
         }
@@ -115,12 +164,17 @@ DlgSettingsGeneral::DlgSettingsGeneral(QWidget* parent)
             this,
             &DlgSettingsGeneral::onManagePreferencePacksClicked
         );
-        connect(
-            ui->themesCombobox,
-            qOverload<int>(&QComboBox::activated),
-            this,
-            &DlgSettingsGeneral::onThemeChanged
-        );
+        const auto onThemeWidgetChanged = [this](QComboBox* combo) {
+            connect(
+                combo,
+                qOverload<int>(&QComboBox::activated),
+                this,
+                &DlgSettingsGeneral::onThemeChanged
+            );
+        };
+        onThemeWidgetChanged(ui->themeModeCombobox);
+        onThemeWidgetChanged(ui->themesCombobox);
+        onThemeWidgetChanged(ui->themesDarkCombobox);
         connect(ui->moreThemesLabel, &QLabel::linkActivated, this, &DlgSettingsGeneral::onLinkActivated);
     }
 
@@ -380,8 +434,11 @@ void DlgSettingsGeneral::resetSettingsToDefaults()
     hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/MainWindow"
     );
-    // reset "Theme" parameter
+    // reset "Theme" parameters
     hGrp->RemoveASCII("Theme");
+    hGrp->RemoveASCII("ThemeMode");
+    hGrp->RemoveASCII("ThemeLight");
+    hGrp->RemoveASCII("ThemeDark");
     // reset "TiledBackground" parameter
     hGrp->RemoveBool("TiledBackground");
 
@@ -408,45 +465,35 @@ void DlgSettingsGeneral::resetSettingsToDefaults()
 
 void DlgSettingsGeneral::saveThemes()
 {
-    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
-        "User parameter:BaseApp/Preferences/MainWindow"
-    );
+    themeChanged = false;
 
-    // First we check if the theme has actually changed.
-    std::string previousTheme = hGrp->GetASCII("Theme", "").c_str();
-    std::string newTheme = ui->themesCombobox->currentText().toStdString();
+    auto* themeManager = ThemeManager::instance();
 
-    if (previousTheme == newTheme) {
-        themeChanged = false;
-        return;
+    const std::string lightTheme = ui->themesCombobox->currentText().toStdString();
+    const std::string darkTheme = ui->themesDarkCombobox->currentText().toStdString();
+
+    if (!lightTheme.empty()) {
+        themeManager->setTheme(ColorScheme::Light, lightTheme);
+    }
+    if (!darkTheme.empty()) {
+        themeManager->setTheme(ColorScheme::Dark, darkTheme);
     }
 
-    // Save the name of the theme
-    hGrp->SetASCII("Theme", newTheme);
+    themeManager->setMode(modeOfIndex(ui->themeModeCombobox->currentIndex()));
 
-    // Then we apply the themepack.
-    Application::Instance->prefPackManager()->rescan();
-    auto packs = Application::Instance->prefPackManager()->preferencePacks();
-
-    for (const auto& pack : packs) {
-        if (pack.first == newTheme) {
-
-            if (Application::Instance->prefPackManager()->apply(pack.first)) {
-                auto parentDialog = qobject_cast<DlgPreferencesImp*>(this->window());
-                if (parentDialog) {
-                    parentDialog->reload();
-                }
-            }
-            break;
+    // Applies the theme of the selected mode, unless it is already the one in use
+    if (themeManager->applyEffectiveTheme()) {
+        auto parentDialog = qobject_cast<DlgPreferencesImp*>(this->window());
+        if (parentDialog) {
+            parentDialog->reload();
         }
     }
-
-    themeChanged = false;
 }
 
 void DlgSettingsGeneral::loadThemes()
 {
     ui->themesCombobox->clear();
+    ui->themesDarkCombobox->clear();
 
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/MainWindow"
@@ -471,7 +518,8 @@ void DlgSettingsGeneral::loadThemes()
             if (packName.contains(currentStyleSheet, Qt::CaseInsensitive)) {
                 similarTheme = QString::fromStdString(pack.first);
             }
-            ui->themesCombobox->addItem(QString::fromStdString(pack.first));
+            ui->themesCombobox->addItem(packName);
+            ui->themesDarkCombobox->addItem(packName);
         }
     }
 
@@ -479,18 +527,16 @@ void DlgSettingsGeneral::loadThemes()
         if (!currentStyleSheet.isEmpty() && !similarTheme.isEmpty()) {  // a user upgrading from
                                                                         // 0.21 or earlier
             hGrp->SetASCII("Theme", similarTheme.toStdString());
-            currentTheme = QString::fromLatin1(hGrp->GetASCII("Theme", "").c_str());
         }
         else {  // a brand new user
             hGrp->SetASCII("Theme", themeClassic.toStdString());
-            currentTheme = QString::fromLatin1(hGrp->GetASCII("Theme", "").c_str());
         }
     }
 
-    int index = ui->themesCombobox->findText(currentTheme);
-    if (index >= 0 && index < ui->themesCombobox->count()) {
-        ui->themesCombobox->setCurrentIndex(index);
-    }
+    auto* themeManager = ThemeManager::instance();
+    selectTheme(ui->themesCombobox, themeManager->theme(ColorScheme::Light));
+    selectTheme(ui->themesDarkCombobox, themeManager->theme(ColorScheme::Dark));
+    ui->themeModeCombobox->setCurrentIndex(indexOfMode(themeManager->mode()));
 }
 
 int DlgSettingsGeneral::getCurrentIconSize() const

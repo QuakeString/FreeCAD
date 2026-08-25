@@ -34,6 +34,7 @@
 #include <App/Application.h>
 #include <Gui/Command.h>
 #include <Gui/PreferencePackManager.h>
+#include <Gui/ThemeManager.h>
 #include <Gui/Utilities.h>
 
 #include <FCConfig.h>
@@ -211,17 +212,18 @@ void ThemeSelectorWidget::preselectThemeFromSystemSettings()
 
 void ThemeSelectorWidget::themeChanged(Theme newTheme)
 {
-    // Run the appropriate preference pack:
-    auto prefPackManager = Gui::Application::Instance->prefPackManager();
+    // Apply the theme and make it the one of its color scheme, so that it is not overridden
+    // again by the theme mode:
+    auto* themeManager = Gui::ThemeManager::instance();
     switch (newTheme) {
         case Theme::Classic:
-            prefPackManager->apply("FreeCAD Classic");
+            themeManager->selectTheme("FreeCAD Classic");
             break;
         case Theme::Dark:
-            prefPackManager->apply("FreeCAD Dark");
+            themeManager->selectTheme("FreeCAD Dark");
             break;
         case Theme::Light:
-            prefPackManager->apply("FreeCAD Light");
+            themeManager->selectTheme("FreeCAD Light");
             break;
     }
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(

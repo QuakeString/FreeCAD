@@ -113,6 +113,7 @@
 #include "TaskView/TaskDialogPython.h"
 #include "TransactionObject.h"
 #include "TextDocumentEditorView.h"
+#include "ThemeManager.h"
 #include "UiLoader.h"
 #include "View3DPy.h"
 #include "View3DViewerPy.h"
@@ -728,6 +729,7 @@ Application::~Application()
         delete pNavlibInterface;
     }
 #endif
+    ThemeManager::destruct();
     WorkbenchManager::destruct();
     WorkbenchManipulator::removeAll();
     SelectionSingleton::destruct();

@@ -1360,6 +1360,7 @@ SET(FreeCADGui_CPP_SRCS
     WaitCursor.cpp
     ManualAlignment.cpp
     StartupProcess.cpp
+    ThemeManager.cpp
     TransactionObject.cpp
     ToolHandler.cpp
     StyleParameters/Value.cpp
@@ -1408,6 +1409,7 @@ SET(FreeCADGui_SRCS
     ManualAlignment.h
     StartupProcess.h
     StatusBarLabel.h
+    ThemeManager.h
     TransactionObject.h
     ToolHandler.h
     StyleParameters/Value.h

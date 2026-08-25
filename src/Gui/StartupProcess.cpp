@@ -54,6 +54,7 @@
 #include "Language/Translator.h"
 #include "Dialogs/DlgVersionMigrator.h"
 #include "FreeCADStyle.h"
+#include "ThemeManager.h"
 
 #include <App/Application.h>
 #include <App/ApplicationDirectories.h>
@@ -543,6 +544,15 @@ void StartupPostProcess::setStyleSheet()
     // In 1.1 we migrated to a common parametrized stylesheet.
     // if we detect an old style, we need to reapply the theme pack.
     migrateOldTheme(style);
+
+    // Applies the theme matching the theme mode (light, dark or the one of the system) and
+    // starts following the color scheme of the system if that mode is selected.
+    ThemeManager::instance()->init();
+
+    // Applying a theme changes the stylesheet, so the current one has to be read back
+    if (const std::string themeStyle = hGrp->GetASCII("StyleSheet"); !themeStyle.empty()) {
+        style = themeStyle;
+    }
 
     guiApp.setStyleSheet(QString::fromStdString(style), hGrp->GetBool("TiledBackground", false));
 }
