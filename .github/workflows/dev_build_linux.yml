@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# ***************************************************************************
+# *                                                                         *
+# *   This file is part of FreeCAD.                                         *
+# *                                                                         *
+# *   FreeCAD is free software: you can redistribute it and/or modify it    *
+# *   under the terms of the GNU Lesser General Public License as           *
+# *   published by the Free Software Foundation, either version 2.1 of the  *
+# *   License, or (at your option) any later version.                       *
+# *                                                                         *
+# *   FreeCAD is distributed in the hope that it will be useful, but        *
+# *   WITHOUT ANY WARRANTY; without even the implied warranty of            *
+# *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU      *
+# *   Lesser General Public License for more details.                       *
+# *                                                                         *
+# *   You should have received a copy of the GNU Lesser General Public      *
+# *   License along with FreeCAD. If not, see                               *
+# *   <https://www.gnu.org/licenses/>.                                      *
+# *                                                                         *
+# ***************************************************************************
+
+# Builds a Linux AppImage of the selected branch for hands-on testing, without
+# the macOS and Windows targets of "Build Release". The AppImage is attached to
+# a single reusable prerelease, so the download link stays the same for every
+# build instead of piling up one release per test.
+#
+# Note: this does not make the AppImage arrive sooner than "Build Release"
+# does - there the platforms build in parallel, so the Linux one is ready at
+# the same point either way. What it saves is runner time (macOS minutes are
+# billed at a 10x multiplier) and a release per run.
+
+name: Dev Build Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Architecture to build
+        type: choice
+        options:
+          - x86_64
+          - aarch64
+          - both
+        default: x86_64
+      releaseTag:
+        description: Prerelease the AppImage is attached to
+        type: string
+        default: dev-linux
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-build-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.pick.outputs.targets }}
+    steps:
+      - name: Pick the targets to build
+        id: pick
+        run: |
+          x86='{"target":"linux-64","os":"ubuntu-22.04"}'
+          arm='{"target":"linux-arm64","os":"ubuntu-22.04-arm"}'
+          case "${{ inputs.arch }}" in
+            aarch64) targets="[$arm]" ;;
+            both)    targets="[$x86,$arm]" ;;
+            *)       targets="[$x86]" ;;
+          esac
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "Building: $targets"
+
+  build:
+    needs: prepare
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.targets) }}
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      # A full FreeCAD build plus the conda environment does not fit next to the
+      # preinstalled toolchains on a stock runner.
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@90e01b21170618765a73370fcc3abbd1684a7793 # v5
+        with:
+          verbose: 'true'
+          remove-android: 'true'      # (frees ~9 GB)
+          remove-cached-tools: 'true' # (frees ~8.3 GB)
+
+      - name: Checkout source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          fetch-tags: true
+          submodules: 'recursive'
+
+      - uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
+        with:
+          pixi-version: v0.68.1
+          cache: false
+
+      # The branch name ends up in the file name, so strip anything a path
+      # cannot carry (a branch like "claude/my-feature" would break it).
+      - name: Determine the build tag
+        run: |
+          SAFE_BRANCH=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          echo "BUILD_TAG=dev-${SAFE_BRANCH}-$(echo ${{ github.sha }} | cut -c1-8)" >> "$GITHUB_ENV"
+
+      - name: Build packages
+        shell: bash
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          python3 package/scripts/write_version_info.py ../freecad_version.txt
+          cd package/rattler-build
+          pixi install --frozen
+
+      # Creates the AppImage but leaves the upload to the step below, so that
+      # every build lands on the same reusable prerelease.
+      - name: Create the AppImage
+        shell: bash
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+          UPLOAD_RELEASE: "false"
+        run: |
+          set -euo pipefail
+          cd package/rattler-build
+          pixi run -e package create_bundle
+
+      - name: Publish the AppImage
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.releaseTag }}
+        run: |
+          set -euo pipefail
+          cd package/rattler-build/linux
+          gh release view "${RELEASE_TAG}" > /dev/null 2>&1 || \
+            gh release create "${RELEASE_TAG}" \
+              --target "${{ github.sha }}" \
+              --title "Linux development builds" \
+              --notes "Linux AppImages built on demand from a branch, for testing. Replaced by every new run of the Dev Build Linux workflow." \
+              --prerelease
+          gh release upload --clobber "${RELEASE_TAG}" \
+            FreeCAD_"${BUILD_TAG}"-Linux-*.AppImage \
+            FreeCAD_"${BUILD_TAG}"-Linux-*.AppImage-SHA256.txt
+          echo "### Linux AppImage (${{ matrix.target }})" >> "$GITHUB_STEP_SUMMARY"
+          for file in FreeCAD_"${BUILD_TAG}"-Linux-*.AppImage; do
+            echo "[$file](https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/$file)" \
+              >> "$GITHUB_STEP_SUMMARY"
+          done
