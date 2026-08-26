@@ -112,11 +112,13 @@ jobs:
           cache: false
 
       # The branch name ends up in the file name, so strip anything a path
-      # cannot carry (a branch like "claude/my-feature" would break it).
+      # cannot carry (a branch like "claude/my-feature" would break it). Only
+      # the branch goes into the name and the commit is reported separately, so
+      # that rebuilding a branch keeps the same download URL.
       - name: Determine the build tag
         run: |
           SAFE_BRANCH=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          echo "BUILD_TAG=dev-${SAFE_BRANCH}-$(echo ${{ github.sha }} | cut -c1-8)" >> "$GITHUB_ENV"
+          echo "BUILD_TAG=dev-${SAFE_BRANCH}" >> "$GITHUB_ENV"
 
       - name: Build packages
         shell: bash
@@ -158,6 +160,7 @@ jobs:
             FreeCAD_"${BUILD_TAG}"-Linux-*.AppImage \
             FreeCAD_"${BUILD_TAG}"-Linux-*.AppImage-SHA256.txt
           echo "### Linux AppImage (${{ matrix.target }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Built from \`${{ github.ref_name }}\` at \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
           for file in FreeCAD_"${BUILD_TAG}"-Linux-*.AppImage; do
             echo "[$file](https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/$file)" \
               >> "$GITHUB_STEP_SUMMARY"
