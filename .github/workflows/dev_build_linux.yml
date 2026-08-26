@@ -32,6 +32,12 @@
 name: Dev Build Linux
 
 on:
+  # Pushing a devbuild-* tag starts a build of whatever commit it points at. Unlike a manual
+  # dispatch this needs no copy of the workflow on the default branch, so a branch can be built
+  # without touching main.
+  push:
+    tags:
+      - devbuild-*
   workflow_dispatch:
     inputs:
       arch:
@@ -111,14 +117,18 @@ jobs:
           pixi-version: v0.68.1
           cache: false
 
-      # The branch name ends up in the file name, so strip anything a path
-      # cannot carry (a branch like "claude/my-feature" would break it). Only
-      # the branch goes into the name and the commit is reported separately, so
-      # that rebuilding a branch keeps the same download URL.
+      # Only the branch goes into the file name and the commit is reported separately, so that
+      # rebuilding a branch keeps the same download URL. Anything a path cannot carry is stripped
+      # from it (a branch like "claude/my-feature" would break it), and a build tag - which names a
+      # single commit rather than a branch - gives a plain name instead.
       - name: Determine the build tag
         run: |
-          SAFE_BRANCH=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          echo "BUILD_TAG=dev-${SAFE_BRANCH}" >> "$GITHUB_ENV"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            NAME="linux"
+          else
+            NAME=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          fi
+          echo "BUILD_TAG=dev-${NAME}" >> "$GITHUB_ENV"
 
       - name: Build packages
         shell: bash
@@ -146,7 +156,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.releaseTag }}
+          RELEASE_TAG: ${{ inputs.releaseTag || 'dev-linux' }}
         run: |
           set -euo pipefail
           cd package/rattler-build/linux
