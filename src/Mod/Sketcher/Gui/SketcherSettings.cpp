@@ -779,6 +779,10 @@ void SketcherSettingsAppearance::saveSettings()
     ui->DimensionalConstraintLineWidth->onSave();
     ui->AxisLineWidth->onSave();
 
+    ui->SelectionHalo->onSave();
+    ui->SelectionHaloColor->onSave();
+    ui->SelectionHaloWidth->onSave();
+
     ui->InternalFaceColor->onSave();
 
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
@@ -855,6 +859,10 @@ void SketcherSettingsAppearance::loadSettings()
     ui->InformationWidth->onRestore();
     ui->DimensionalConstraintLineWidth->onRestore();
     ui->AxisLineWidth->onRestore();
+
+    ui->SelectionHalo->onRestore();
+    ui->SelectionHaloColor->onRestore();
+    ui->SelectionHaloWidth->onRestore();
 
     ui->InternalFaceColor->setAllowTransparency(true);
     ui->InternalFaceColor->onRestore();

@@ -846,6 +846,70 @@
          </property>
         </widget>
       </item>
+      <item row="17" column="0">
+       <widget class="Gui::PrefCheckBox" name="SelectionHalo">
+        <property name="toolTip">
+         <string>Surround selected and preselected geometry with a halo, so that it can be told apart from geometry that is merely coloured alike, such as fully constrained elements</string>
+        </property>
+        <property name="text">
+         <string>Selection halo</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+        <property name="prefEntry" stdset="0">
+         <cstring>SelectionHalo</cstring>
+        </property>
+        <property name="prefPath" stdset="0">
+         <cstring>Mod/Sketcher/View</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="17" column="2">
+       <widget class="Gui::PrefColorButton" name="SelectionHaloColor">
+        <property name="toolTip">
+         <string>Color of the halo around selected and preselected geometry</string>
+        </property>
+        <property name="color" stdset="0">
+         <color>
+          <red>255</red>
+          <green>165</green>
+          <blue>0</blue>
+         </color>
+        </property>
+        <property name="prefEntry" stdset="0">
+         <cstring>SelectionHaloColor</cstring>
+        </property>
+        <property name="prefPath" stdset="0">
+         <cstring>Mod/Sketcher/View</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="17" column="4">
+       <widget class="Gui::PrefSpinBox" name="SelectionHaloWidth">
+        <property name="toolTip">
+         <string>Width the halo adds around selected and preselected geometry</string>
+        </property>
+        <property name="suffix">
+         <string notr="true"> px</string>
+        </property>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>20</number>
+        </property>
+        <property name="value">
+         <number>4</number>
+        </property>
+        <property name="prefEntry" stdset="0">
+         <cstring>SelectionHaloWidth</cstring>
+        </property>
+        <property name="prefPath" stdset="0">
+         <cstring>Mod/Sketcher/View</cstring>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

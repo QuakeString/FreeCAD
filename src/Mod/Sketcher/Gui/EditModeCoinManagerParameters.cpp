@@ -81,6 +81,7 @@ SbColor DrawingParameters::CurveColor(1.0f, 1.0f, 1.0f);                        
 SbColor DrawingParameters::PreselectColor(10.0f / 255.0f, 200.0f / 255.0f, 1.0f);           // #0AC8FF -> ( 10,200,255)
 SbColor DrawingParameters::SelectColor(0.0f, 171.0f / 255.0f, 1.0f);                        // #00ABFF -> (  0,171,255)
 SbColor DrawingParameters::PreselectSelectedColor(5.0f / 255.0f, 186.0f / 255.0f, 1.0f);    // #05BAFF -> (  5,186,255)
+SbColor DrawingParameters::SelectHaloColor(1.0f, 165.0f / 255.0f, 0.0f);                    // #FFA500 -> (255,165,  0)
 SbColor DrawingParameters::CurveExternalColor(0.8f, 0.2f, 0.6f);                            // #CC3399 -> (204, 51,153)
 SbColor DrawingParameters::CurveExternalDefiningColor(0.8f, 0.2f, 0.6f);                    // #CC3399 -> (204, 51,153)
 SbColor DrawingParameters::CurveDraftColor(0.0f, 0.0f, 0.86f);                              // #0000DC -> (  0,  0,220)

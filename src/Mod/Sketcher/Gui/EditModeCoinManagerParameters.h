@@ -83,6 +83,7 @@ struct DrawingParameters
     const float zHighPoints = 0.013f;  // Height used for top rendered points
     const float zHighlight = 0.014f;   // Height for highlighted points (selected/preselected)
     const float zText = 0.014f;        // Height for rendered text
+    const float zHaloOffset = 0.0004f;  // Depth offset placing a halo just behind its geometry
     //@}
 
     /// Different categories of geometries that can be selected by the user to be rendered on top,
@@ -117,6 +118,7 @@ struct DrawingParameters
     static SbColor PreselectSelectedColor;  // Color used for preselection when geometry is already
                                             // selected
     static SbColor SelectColor;             // Color used for selected geometry
+    static SbColor SelectHaloColor;         // Color of the halo drawn around selected geometry
     static SbColor CurveExternalColor;      // Color used for external geometry
     static SbColor CurveExternalDefiningColor;  // Color used for external defining geometry
     static SbColor CurveDraftColor;             // Color used for construction geometry
@@ -146,6 +148,11 @@ struct DrawingParameters
     float axisTransparency = 0.3f;
     // transparency of axis when occluded
     float occludedAxisTransparency = 0.9f;
+
+    bool SelectHalo = true;  // Whether selected and preselected geometry gets a halo, so that it
+                             // can be told apart from geometry that is merely coloured alike
+    int SelectHaloWidth = 4;              // width in pixels the halo adds around the geometry
+    float SelectHaloTransparency = 0.3f;  // transparency of the halo
 
     int CurveWidth = 2;                      // width of normal edges
     int ConstructionWidth = 1;               // width of construction edges
@@ -422,6 +429,18 @@ struct EditModeScenegraphNodes
     std::vector<SoMarkerSet*> PointSet;
     //@}
 
+    /** @name Halo nodes of the points
+     *
+     * A second pass over the very same coordinates, drawn with a bigger marker just behind the
+     * points, which surrounds selected and preselected points with a ring.
+     */
+    //@{
+    SmSwitchboard* PointsHaloGroup;
+    std::vector<SoMaterial*> PointsHaloMaterials;
+    std::vector<SoTranslation*> PointsHaloTranslation;
+    std::vector<SoMarkerSet*> PointHaloSet;
+    //@}
+
     /** @name Origin Point nodes*/
     //@{
     SoMaterial* OriginPointMaterial;
@@ -448,6 +467,22 @@ struct EditModeScenegraphNodes
     SoDrawStyle* CurvesExternalDrawStyle;
     SoDrawStyle* CurvesExternalDefiningDrawStyle;
     SoDrawStyle* HiddenCurvesDrawStyle;
+    //@}
+
+    /** @name Halo nodes of the curves
+     *
+     * A second pass over the very same coordinates and line sets, drawn wider and just behind the
+     * curves, which surrounds selected and preselected curves with an outline.
+     */
+    //@{
+    SmSwitchboard* CurvesHaloGroup;
+    std::vector<std::vector<SoMaterial*>> CurvesHaloMaterials;
+    std::vector<std::vector<SoTranslation*>> CurvesHaloTranslation;
+    SoDrawStyle* CurvesHaloDrawStyle;
+    SoDrawStyle* CurvesHaloConstructionDrawStyle;
+    SoDrawStyle* CurvesHaloInternalDrawStyle;
+    SoDrawStyle* CurvesHaloExternalDrawStyle;
+    SoDrawStyle* CurvesHaloExternalDefiningDrawStyle;
     //@}
 
     /** @name Axes nodes*/

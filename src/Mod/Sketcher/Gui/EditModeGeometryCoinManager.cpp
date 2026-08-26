@@ -32,7 +32,10 @@
 #include <Inventor/nodes/SoLineSet.h>
 #include <Inventor/nodes/SoMarkerSet.h>
 #include <Inventor/nodes/SoMaterial.h>
+#include <Inventor/nodes/SoMaterialBinding.h>
+#include <Inventor/nodes/SoPickStyle.h>
 #include <Inventor/nodes/SoSeparator.h>
+#include <Inventor/nodes/SoTranslation.h>
 
 #include <Gui/Inventor/MarkerBitmaps.h>
 #include <Gui/Inventor/SmSwitchboard.h>
@@ -80,23 +83,39 @@ void EditModeGeometryCoinManager::processGeometry(const GeoListFacade& geolistfa
     editModeScenegraphNodes.CurvesGroup->enable.setNum(
         geometryLayerParameters.getCoinLayerCount() * geometryLayerParameters.getSubLayerCount()
     );
+    editModeScenegraphNodes.PointsHaloGroup->enable.setNum(
+        geometryLayerParameters.getCoinLayerCount()
+    );
+    editModeScenegraphNodes.CurvesHaloGroup->enable.setNum(
+        geometryLayerParameters.getCoinLayerCount() * geometryLayerParameters.getSubLayerCount()
+    );
     SbBool* swsp = editModeScenegraphNodes.PointsGroup->enable.startEditing();
     SbBool* swsc = editModeScenegraphNodes.CurvesGroup->enable.startEditing();
+    SbBool* swsph = editModeScenegraphNodes.PointsHaloGroup->enable.startEditing();
+    SbBool* swsch = editModeScenegraphNodes.CurvesHaloGroup->enable.startEditing();
 
     auto layersconfigurations = viewProvider.VisualLayerList.getValues();
 
     for (auto l = 0; l < geometryLayerParameters.getCoinLayerCount(); l++) {
         auto enabled = layersconfigurations[l].isVisible();
 
+        // Without the halo its pass is switched off altogether, rather than left drawing fully
+        // transparent geometry every frame.
+        auto haloEnabled = enabled && drawingParameters.SelectHalo;
+
         swsp[l] = enabled;
+        swsph[l] = haloEnabled;
         int slCount = geometryLayerParameters.getSubLayerCount();
         for (int t = 0; t < slCount; t++) {
             swsc[l * slCount + t] = enabled;
+            swsch[l * slCount + t] = haloEnabled;
         }
     }
 
     editModeScenegraphNodes.PointsGroup->enable.finishEditing();
     editModeScenegraphNodes.CurvesGroup->enable.finishEditing();
+    editModeScenegraphNodes.PointsHaloGroup->enable.finishEditing();
+    editModeScenegraphNodes.CurvesHaloGroup->enable.finishEditing();
 
     // Define the coin nodes that will be filled in with the geometry layers
     GeometryLayerNodes geometrylayernodes {
@@ -232,6 +251,25 @@ void EditModeGeometryCoinManager::updateGeometryColor(
         int PtNum = editModeScenegraphNodes.PointsMaterials[l]->diffuseColor.getNum();
         SbColor* pcolor = editModeScenegraphNodes.PointsMaterials[l]->diffuseColor.startEditing();
         SbVec3f* pverts = editModeScenegraphNodes.PointsCoordinate[l]->point.startEditing();
+
+        // The halo pass mirrors the point set one to one. Every point gets an entry and starts out
+        // fully transparent, so that only the points marked below end up surrounded by a ring.
+        SoMaterial* pointsHaloMaterial = editModeScenegraphNodes.PointsHaloMaterials[l];
+        pointsHaloMaterial->diffuseColor.setNum(PtNum);
+        pointsHaloMaterial->transparency.setNum(PtNum);
+        SbColor* phcolor = pointsHaloMaterial->diffuseColor.startEditing();
+        float* phtransparency = pointsHaloMaterial->transparency.startEditing();
+        for (int i = 0; i < PtNum; i++) {
+            phcolor[i] = drawingParameters.SelectHaloColor;
+            phtransparency[i] = 1.0f;
+        }
+
+        // The halo shares the coordinates of the geometry, so it is moved behind it as a whole.
+        editModeScenegraphNodes.PointsHaloTranslation[l]->translation.setValue(
+            0,
+            0,
+            -viewOrientationFactor * drawingParameters.zHaloOffset
+        );
 
         // colors of the point set
         for (int i = 0; i < PtNum; i++) {
@@ -391,6 +429,11 @@ void EditModeGeometryCoinManager::updateGeometryColor(
 
                 pcolor[preselectpointmfid.fieldIndex] = drawingParameters.PreselectColor;
 
+                if (drawingParameters.SelectHalo) {
+                    phtransparency[preselectpointmfid.fieldIndex]
+                        = drawingParameters.SelectHaloTransparency;
+                }
+
                 raisePoint(
                     pverts[preselectpointmfid.fieldIndex],
                     viewOrientationFactor * drawingParameters.zHighlight
@@ -403,6 +446,7 @@ void EditModeGeometryCoinManager::updateGeometryColor(
             [this,
              pcolor,
              pverts,
+             phtransparency,
              PtNum,
              preselectpointmfid,
              layerId = l,
@@ -423,6 +467,11 @@ void EditModeGeometryCoinManager::updateGeometryColor(
                     pcolor[pointindex.fieldIndex] = (preselectpointmfid == pointindex)
                         ? drawingParameters.PreselectSelectedColor
                         : drawingParameters.SelectColor;
+
+                    if (drawingParameters.SelectHalo) {
+                        phtransparency[pointindex.fieldIndex]
+                            = drawingParameters.SelectHaloTransparency;
+                    }
 
                     raisePoint(
                         pverts[pointindex.fieldIndex],
@@ -460,6 +509,24 @@ void EditModeGeometryCoinManager::updateGeometryColor(
             SbColor* color = editModeScenegraphNodes.CurvesMaterials[l][t]->diffuseColor.startEditing();
             SbVec3f* verts = editModeScenegraphNodes.CurvesCoordinate[l][t]->point.startEditing();
 
+            // As for the points, the halo pass mirrors the curves and only the ones marked below
+            // are made visible.
+            SoMaterial* curvesHaloMaterial = editModeScenegraphNodes.CurvesHaloMaterials[l][t];
+            curvesHaloMaterial->diffuseColor.setNum(CurvNum);
+            curvesHaloMaterial->transparency.setNum(CurvNum);
+            SbColor* hcolor = curvesHaloMaterial->diffuseColor.startEditing();
+            float* htransparency = curvesHaloMaterial->transparency.startEditing();
+            for (int i = 0; i < CurvNum; i++) {
+                hcolor[i] = drawingParameters.SelectHaloColor;
+                htransparency[i] = 1.0f;
+            }
+
+            editModeScenegraphNodes.CurvesHaloTranslation[l][t]->translation.setValue(
+                0,
+                0,
+                -viewOrientationFactor * drawingParameters.zHaloOffset
+            );
+
             int j = 0;  // vertexindex
             for (int i = 0; i < CurvNum; i++) {
                 if (!coinMapping.isValidCurveId(i, l, t)) {
@@ -490,6 +557,10 @@ void EditModeGeometryCoinManager::updateGeometryColor(
                     color[i] = selected ? (preselected ? drawingParameters.PreselectSelectedColor
                                                        : drawingParameters.SelectColor)
                                         : drawingParameters.PreselectColor;
+
+                    if (drawingParameters.SelectHalo) {
+                        htransparency[i] = drawingParameters.SelectHaloTransparency;
+                    }
 
                     for (int k = j; j < k + indexes; j++) {
                         verts[j].getValue(x, y, z);
@@ -572,6 +643,8 @@ void EditModeGeometryCoinManager::updateGeometryColor(
             editModeScenegraphNodes.CurvesMaterials[l][t]->diffuseColor.finishEditing();
             editModeScenegraphNodes.CurvesCoordinate[l][t]->point.finishEditing();
             editModeScenegraphNodes.CurveSet[l][t]->numVertices.finishEditing();
+            curvesHaloMaterial->diffuseColor.finishEditing();
+            curvesHaloMaterial->transparency.finishEditing();
         }
 
         // colors of the cross
@@ -599,6 +672,8 @@ void EditModeGeometryCoinManager::updateGeometryColor(
 
         editModeScenegraphNodes.PointsMaterials[l]->diffuseColor.finishEditing();
         editModeScenegraphNodes.PointsCoordinate[l]->point.finishEditing();
+        pointsHaloMaterial->diffuseColor.finishEditing();
+        pointsHaloMaterial->transparency.finishEditing();
     }
 
     editModeScenegraphNodes.RootCrossHMaterials->diffuseColor.finishEditing();
@@ -649,6 +724,13 @@ void EditModeGeometryCoinManager::createEditModeInventorNodes()
 
 void EditModeGeometryCoinManager::createGeometryRootNodes()
 {
+    // The halo passes come first, so that the geometry is drawn over its own halo.
+    editModeScenegraphNodes.CurvesHaloGroup = new SmSwitchboard;
+    editModeScenegraphNodes.EditRoot->addChild(editModeScenegraphNodes.CurvesHaloGroup);
+
+    editModeScenegraphNodes.PointsHaloGroup = new SmSwitchboard;
+    editModeScenegraphNodes.EditRoot->addChild(editModeScenegraphNodes.PointsHaloGroup);
+
     // stuff for the points ++++++++++++++++++++++++++++++++++++++
     editModeScenegraphNodes.PointsGroup = new SmSwitchboard;
     editModeScenegraphNodes.EditRoot->addChild(editModeScenegraphNodes.PointsGroup);
@@ -660,8 +742,27 @@ void EditModeGeometryCoinManager::createGeometryRootNodes()
 
 void EditModeGeometryCoinManager::emptyGeometryRootNodes()
 {
+    Gui::coinRemoveAllChildren(editModeScenegraphNodes.PointsHaloGroup);
+    Gui::coinRemoveAllChildren(editModeScenegraphNodes.CurvesHaloGroup);
     Gui::coinRemoveAllChildren(editModeScenegraphNodes.PointsGroup);
     Gui::coinRemoveAllChildren(editModeScenegraphNodes.CurvesGroup);
+
+    // Removing the separators deletes the nodes they held, so the pointers to them have to go as
+    // well. The creation of the layers appends to these vectors, and would otherwise both leave
+    // dangling pointers behind and shift every layer index.
+    editModeScenegraphNodes.PointsMaterials.clear();
+    editModeScenegraphNodes.PointsCoordinate.clear();
+    editModeScenegraphNodes.PointsDrawStyle.clear();
+    editModeScenegraphNodes.PointSet.clear();
+    editModeScenegraphNodes.PointsHaloMaterials.clear();
+    editModeScenegraphNodes.PointsHaloTranslation.clear();
+    editModeScenegraphNodes.PointHaloSet.clear();
+
+    editModeScenegraphNodes.CurvesMaterials.clear();
+    editModeScenegraphNodes.CurvesCoordinate.clear();
+    editModeScenegraphNodes.CurveSet.clear();
+    editModeScenegraphNodes.CurvesHaloMaterials.clear();
+    editModeScenegraphNodes.CurvesHaloTranslation.clear();
 }
 
 void EditModeGeometryCoinManager::createEditModePointInventorNodes()
@@ -703,7 +804,69 @@ void EditModeGeometryCoinManager::createEditModePointInventorNodes()
 
         editModeScenegraphNodes.PointsGroup->addChild(sep);
         sep->unref();
+
+        createEditModePointHaloInventorNodes(i);
     }
+}
+
+void EditModeGeometryCoinManager::createEditModePointHaloInventorNodes(int layer)
+{
+    SoSeparator* sep = new SoSeparator;
+    sep->ref();
+
+    // The halo is decoration only: picking must keep reaching the geometry below it.
+    auto pickstyle = new SoPickStyle;
+    pickstyle->style = SoPickStyle::UNPICKABLE;
+    sep->addChild(pickstyle);
+
+    auto translation = new SoTranslation;
+    translation->setName(concat("PointsHaloTranslation", layer).c_str());
+    editModeScenegraphNodes.PointsHaloTranslation.push_back(translation);
+    sep->addChild(translation);
+
+    auto somaterial = new SoMaterial;
+    somaterial->setName(concat("PointsHaloMaterials_", layer).c_str());
+    editModeScenegraphNodes.PointsHaloMaterials.push_back(somaterial);
+    sep->addChild(somaterial);
+
+    auto mtlBind = new SoMaterialBinding;
+    mtlBind->setName(concat("PointsHaloMaterialBinding", layer).c_str());
+    mtlBind->value = SoMaterialBinding::PER_VERTEX;
+    sep->addChild(mtlBind);
+
+    // The very same coordinates as the point set, so that the halo needs no bookkeeping of its own
+    sep->addChild(editModeScenegraphNodes.PointsCoordinate[layer]);
+
+    auto pointset = new SoMarkerSet;
+    pointset->setName(concat("PointHaloSet", layer).c_str());
+    pointset->markerIndex = getHaloMarkerIndex();
+    editModeScenegraphNodes.PointHaloSet.push_back(pointset);
+    sep->addChild(pointset);
+
+    editModeScenegraphNodes.PointsHaloGroup->addChild(sep);
+    sep->unref();
+}
+
+int EditModeGeometryCoinManager::getHaloMarkerIndex() const
+{
+    // Marker bitmaps only exist in a handful of sizes, and an unknown size silently falls back to
+    // the smallest one, so the next size up that is actually available has to be picked.
+    int wanted = drawingParameters.markerSize + 2 * drawingParameters.SelectHaloWidth;
+
+    auto sizes = Gui::Inventor::MarkerBitmaps::getSupportedSizes("CIRCLE_FILLED");
+    sizes.sort();
+
+    int size = drawingParameters.markerSize;
+    for (int supported : sizes) {
+        if (supported > drawingParameters.markerSize) {
+            size = supported;
+            if (supported >= wanted) {
+                break;
+            }
+        }
+    }
+
+    return Gui::Inventor::MarkerBitmaps::getMarkerIndex("CIRCLE_FILLED", size);
 }
 
 void EditModeGeometryCoinManager::createEditModeCurveInventorNodes()
@@ -745,10 +908,14 @@ void EditModeGeometryCoinManager::createEditModeCurveInventorNodes()
         = drawingParameters.ExternalDefiningPattern;
     editModeScenegraphNodes.CurvesExternalDefiningDrawStyle->linePatternScaleFactor = 2;
 
+    createEditModeCurveHaloDrawStyles();
+
     for (int i = 0; i < geometryLayerParameters.getCoinLayerCount(); i++) {
         editModeScenegraphNodes.CurvesMaterials.emplace_back();
         editModeScenegraphNodes.CurvesCoordinate.emplace_back();
         editModeScenegraphNodes.CurveSet.emplace_back();
+        editModeScenegraphNodes.CurvesHaloMaterials.emplace_back();
+        editModeScenegraphNodes.CurvesHaloTranslation.emplace_back();
         for (int t = 0; t < geometryLayerParameters.getSubLayerCount(); t++) {
             SoSeparator* sep = new SoSeparator;
             sep->ref();
@@ -791,6 +958,126 @@ void EditModeGeometryCoinManager::createEditModeCurveInventorNodes()
 
             editModeScenegraphNodes.CurvesGroup->addChild(sep);
             sep->unref();
+
+            createEditModeCurveHaloInventorNodes(i, t);
         }
     }
+}
+
+void EditModeGeometryCoinManager::createEditModeCurveHaloDrawStyles()
+{
+    const auto haloDrawStyle = [](SoDrawStyle* style, const char* name) {
+        style->setName(name);
+        // A solid halo, so that a dashed curve is still surrounded by an unbroken outline
+        style->linePattern = 0b1111111111111111;
+    };
+
+    editModeScenegraphNodes.CurvesHaloDrawStyle = new SoDrawStyle;
+    haloDrawStyle(editModeScenegraphNodes.CurvesHaloDrawStyle, "CurvesHaloDrawStyle");
+
+    editModeScenegraphNodes.CurvesHaloConstructionDrawStyle = new SoDrawStyle;
+    haloDrawStyle(
+        editModeScenegraphNodes.CurvesHaloConstructionDrawStyle,
+        "CurvesHaloConstructionDrawStyle"
+    );
+
+    editModeScenegraphNodes.CurvesHaloInternalDrawStyle = new SoDrawStyle;
+    haloDrawStyle(
+        editModeScenegraphNodes.CurvesHaloInternalDrawStyle,
+        "CurvesHaloInternalDrawStyle"
+    );
+
+    editModeScenegraphNodes.CurvesHaloExternalDrawStyle = new SoDrawStyle;
+    haloDrawStyle(
+        editModeScenegraphNodes.CurvesHaloExternalDrawStyle,
+        "CurvesHaloExternalDrawStyle"
+    );
+
+    editModeScenegraphNodes.CurvesHaloExternalDefiningDrawStyle = new SoDrawStyle;
+    haloDrawStyle(
+        editModeScenegraphNodes.CurvesHaloExternalDefiningDrawStyle,
+        "CurvesHaloExternalDefiningDrawStyle"
+    );
+
+    updateHaloNodeSizes();
+}
+
+void EditModeGeometryCoinManager::updateHaloNodeSizes()
+{
+    const auto haloWidth = [this](int width) {
+        return (width + 2 * drawingParameters.SelectHaloWidth)
+            * drawingParameters.pixelScalingFactor;
+    };
+
+    editModeScenegraphNodes.CurvesHaloDrawStyle->lineWidth = haloWidth(
+        drawingParameters.CurveWidth
+    );
+    editModeScenegraphNodes.CurvesHaloConstructionDrawStyle->lineWidth = haloWidth(
+        drawingParameters.ConstructionWidth
+    );
+    editModeScenegraphNodes.CurvesHaloInternalDrawStyle->lineWidth = haloWidth(
+        drawingParameters.InternalWidth
+    );
+    editModeScenegraphNodes.CurvesHaloExternalDrawStyle->lineWidth = haloWidth(
+        drawingParameters.ExternalWidth
+    );
+    editModeScenegraphNodes.CurvesHaloExternalDefiningDrawStyle->lineWidth = haloWidth(
+        drawingParameters.ExternalDefiningWidth
+    );
+
+    int markerIndex = getHaloMarkerIndex();
+    for (auto* pointHaloSet : editModeScenegraphNodes.PointHaloSet) {
+        pointHaloSet->markerIndex = markerIndex;
+    }
+}
+
+void EditModeGeometryCoinManager::createEditModeCurveHaloInventorNodes(int layer, int sublayer)
+{
+    SoSeparator* sep = new SoSeparator;
+    sep->ref();
+
+    // The halo is decoration only: picking must keep reaching the geometry below it.
+    auto pickstyle = new SoPickStyle;
+    pickstyle->style = SoPickStyle::UNPICKABLE;
+    sep->addChild(pickstyle);
+
+    auto translation = new SoTranslation;
+    translation->setName(concat("CurvesHaloTranslation", layer * 10 + sublayer).c_str());
+    editModeScenegraphNodes.CurvesHaloTranslation[layer].push_back(translation);
+    sep->addChild(translation);
+
+    auto somaterial = new SoMaterial;
+    somaterial->setName(concat("CurvesHaloMaterials", layer * 10 + sublayer).c_str());
+    editModeScenegraphNodes.CurvesHaloMaterials[layer].push_back(somaterial);
+    sep->addChild(somaterial);
+
+    auto mtlBind = new SoMaterialBinding;
+    mtlBind->setName(concat("CurvesHaloMaterialsBinding", layer * 10 + sublayer).c_str());
+    mtlBind->value = SoMaterialBinding::PER_FACE;
+    sep->addChild(mtlBind);
+
+    // The very same coordinates and line set as the geometry, so that the halo follows it without
+    // any bookkeeping of its own
+    sep->addChild(editModeScenegraphNodes.CurvesCoordinate[layer][sublayer]);
+
+    if (geometryLayerParameters.isConstructionSubLayer(sublayer)) {
+        sep->addChild(editModeScenegraphNodes.CurvesHaloConstructionDrawStyle);
+    }
+    else if (geometryLayerParameters.isInternalSubLayer(sublayer)) {
+        sep->addChild(editModeScenegraphNodes.CurvesHaloInternalDrawStyle);
+    }
+    else if (geometryLayerParameters.isExternalSubLayer(sublayer)) {
+        sep->addChild(editModeScenegraphNodes.CurvesHaloExternalDrawStyle);
+    }
+    else if (geometryLayerParameters.isExternalDefiningSubLayer(sublayer)) {
+        sep->addChild(editModeScenegraphNodes.CurvesHaloExternalDefiningDrawStyle);
+    }
+    else {
+        sep->addChild(editModeScenegraphNodes.CurvesHaloDrawStyle);
+    }
+
+    sep->addChild(editModeScenegraphNodes.CurveSet[layer][sublayer]);
+
+    editModeScenegraphNodes.CurvesHaloGroup->addChild(sep);
+    sep->unref();
 }

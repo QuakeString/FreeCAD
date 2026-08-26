@@ -671,6 +671,13 @@ void EditModeCoinManager::ParameterObserver::initParameters()
          [this, drawingParameters = Client.drawingParameters](const std::string& param) {
              updateColor(drawingParameters.SelectColor, param);
          }},
+        {"SelectionHalo", [this](const std::string& param) { updateSelectionHalo(param); }},
+        {"SelectionHaloWidth",
+         [this](const std::string& param) { updateSelectionHaloWidth(param); }},
+        {"SelectionHaloColor",
+         [this, &drawingParameters = Client.drawingParameters](const std::string& param) {
+             updateSketcherViewColor(drawingParameters.SelectHaloColor, param);
+         }},
         {"CursorTextColor",
          [this, drawingParameters = Client.drawingParameters](const std::string& param) {
              updateColor(drawingParameters.CursorTextColor, param);
@@ -849,6 +856,47 @@ void EditModeCoinManager::ParameterObserver::updateColor(SbColor& sbcolor, const
 {
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/View"
+    );
+
+    float transparency = 0.f;
+    unsigned long color = (unsigned long)(sbcolor.getPackedValue());
+    color = hGrp->GetUnsigned(parametername.c_str(), color);
+    sbcolor.setPackedValue((uint32_t)color, transparency);
+
+    Client.updateInventorColors();
+}
+
+void EditModeCoinManager::ParameterObserver::updateSelectionHalo(const std::string& parametername)
+{
+    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/Mod/Sketcher/View"
+    );
+
+    Client.drawingParameters.SelectHalo = hGrp->GetBool(parametername.c_str(), true);
+
+    Client.redrawViewProvider();
+}
+
+void EditModeCoinManager::ParameterObserver::updateSelectionHaloWidth(
+    const std::string& parametername
+)
+{
+    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/Mod/Sketcher/View"
+    );
+
+    Client.drawingParameters.SelectHaloWidth = std::max(1, hGrp->GetInt(parametername.c_str(), 4));
+
+    Client.updateInventorWidths();
+}
+
+void EditModeCoinManager::ParameterObserver::updateSketcherViewColor(
+    SbColor& sbcolor,
+    const std::string& parametername
+)
+{
+    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/Mod/Sketcher/View"
     );
 
     float transparency = 0.f;
@@ -2244,6 +2292,8 @@ void EditModeCoinManager::updateInventorWidths()
         * drawingParameters.pixelScalingFactor;
     editModeScenegraphNodes.CurvesExternalDefiningDrawStyle->lineWidth
         = drawingParameters.ExternalDefiningWidth * drawingParameters.pixelScalingFactor;
+
+    pEditModeGeometryCoinManager->updateHaloNodeSizes();
 }
 
 void EditModeCoinManager::updateInventorPatterns()

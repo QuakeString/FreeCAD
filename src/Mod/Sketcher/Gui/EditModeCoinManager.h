@@ -155,6 +155,9 @@ class SketcherGuiExport EditModeCoinManager
         void updatePattern(unsigned int& pattern, const std::string& pname, unsigned int def);
         void updateColor(SbColor& sbcolor, const std::string& parametername);
         void updateSketcherGridColor(SbColor& sbcolor, const std::string& parametername);
+        void updateSketcherViewColor(SbColor& sbcolor, const std::string& parametername);
+        void updateSelectionHalo(const std::string& parametername);
+        void updateSelectionHaloWidth(const std::string& parametername);
         void updateUnit(const std::string& parametername);
 
         template<OverlayVisibilityParameter visibilityparameter>

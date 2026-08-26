@@ -105,6 +105,9 @@ public:
 
     void updateGeometryLayersConfiguration();
 
+    /// Resizes the halo of selected geometry after a change of widths or of the halo itself
+    void updateHaloNodeSizes();
+
     /** @name coin nodes creation*/
     void createEditModeInventorNodes();
     //@}
@@ -114,6 +117,15 @@ private:
     void emptyGeometryRootNodes();
     void createEditModePointInventorNodes();
     void createEditModeCurveInventorNodes();
+
+    /** @name Creation of the halo surrounding selected and preselected geometry */
+    //@{
+    void createEditModePointHaloInventorNodes(int layer);
+    void createEditModeCurveHaloDrawStyles();
+    void createEditModeCurveHaloInventorNodes(int layer, int sublayer);
+    /// Index of the marker used for the halo of the points, the next size up that is available
+    int getHaloMarkerIndex() const;
+    //@}
 
 private:
     ViewProviderSketch& viewProvider;
