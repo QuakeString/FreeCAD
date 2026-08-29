@@ -143,6 +143,13 @@ requirements:
       then:
         - libspnav
         - xorg-xproto
+        # Without this the crash reporter is built without stack capture. Keep the build
+        # string in step with the one pinned in the pixi.toml of the repository root.
+        - cpptrace 1.0.4.* libunwind_*
+
+    - if: not linux
+      then:
+        - cpptrace
 
   run:
     - av
