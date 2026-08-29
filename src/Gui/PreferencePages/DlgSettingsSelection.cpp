@@ -52,6 +52,10 @@ void DlgSettingsSelection::saveSettings()
     ui->checkBoxPreselect->onSave();
     ui->checkBoxRecord->onSave();
     ui->checkBoxSelectionCheckBoxes->onSave();
+    ui->checkBoxSelectionOnTop->onSave();
+    ui->checkBoxPreSelectedFaceOnTop->onSave();
+    ui->spinBoxTransparencyOnTop->onSave();
+    ui->spinBoxMaxOnTopSelections->onSave();
 }
 
 void DlgSettingsSelection::loadSettings()
@@ -66,6 +70,10 @@ void DlgSettingsSelection::loadSettings()
     ui->checkBoxPreselect->onRestore();
     ui->checkBoxRecord->onRestore();
     ui->checkBoxSelectionCheckBoxes->onRestore();
+    ui->checkBoxSelectionOnTop->onRestore();
+    ui->checkBoxPreSelectedFaceOnTop->onRestore();
+    ui->spinBoxTransparencyOnTop->onRestore();
+    ui->spinBoxMaxOnTopSelections->onRestore();
 }
 
 void DlgSettingsSelection::changeEvent(QEvent* e)
