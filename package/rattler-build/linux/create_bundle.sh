@@ -13,6 +13,14 @@ echo -e "\nDelete unnecessary stuff"
 rm -rf ${conda_env}/include
 find ${conda_env} -name \*.a -delete
 
+# The graphics stack must come from the host. conda ships libGL/libEGL/libGLX without any
+# DRI driver, and RPATH makes those shadow the working ones on the user's system, so GLX
+# finds no FBConfig at all and Qt aborts before the first window. libdrm and the xcb/X11
+# libraries go with them: the host driver has to talk to the same ones it was built against.
+echo -e "\nDrop the bundled graphics stack so the host drivers are used"
+( cd ${conda_env}/lib && rm -fv libGL.so* libGLX.so* libEGL.so* libglapi.so* libgbm.so* \
+    libdrm.so* libdrm_*.so* libX11.so* libX11-xcb.so* libxcb*.so* libxshmfence.so* )
+
 mv ${conda_env}/bin ${conda_env}/bin_tmp
 mkdir ${conda_env}/bin
 cp ${conda_env}/bin_tmp/freecad ${conda_env}/bin/
