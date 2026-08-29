@@ -353,6 +353,42 @@ void ViewParams::setup()
     );
 
     static_assert(
+        Base::is_getter<decltype(&ViewParams::getShowSelectionOnTop), Bool::value_type>,
+        "Mismatching signature"
+    );
+    static_assert(
+        Base::is_setter<decltype(&ViewParams::setShowSelectionOnTop), Bool::value_type>,
+        "Mismatching signature"
+    );
+
+    static_assert(
+        Base::is_getter<decltype(&ViewParams::getShowPreSelectedFaceOnTop), Bool::value_type>,
+        "Mismatching signature"
+    );
+    static_assert(
+        Base::is_setter<decltype(&ViewParams::setShowPreSelectedFaceOnTop), Bool::value_type>,
+        "Mismatching signature"
+    );
+
+    static_assert(
+        Base::is_getter<decltype(&ViewParams::getTransparencyOnTop), Double::value_type>,
+        "Mismatching signature"
+    );
+    static_assert(
+        Base::is_setter<decltype(&ViewParams::setTransparencyOnTop), Double::value_type>,
+        "Mismatching signature"
+    );
+
+    static_assert(
+        Base::is_getter<decltype(&ViewParams::getMaxOnTopSelections), Int::value_type>,
+        "Mismatching signature"
+    );
+    static_assert(
+        Base::is_setter<decltype(&ViewParams::setMaxOnTopSelections), Int::value_type>,
+        "Mismatching signature"
+    );
+
+    static_assert(
         Base::is_getter<decltype(&ViewParams::getSelectionColor), Unsigned::value_type>,
         "Mismatching signature"
     );
@@ -415,6 +451,10 @@ void ViewParams::setup()
     addParameter("SelectionLineMaxWidth", Double {4.0});
     addParameter("SelectionBBoxLineWidth", Double {3.0});
     addParameter("MaxViewSelections", Int {100});
+    addParameter("ShowSelectionOnTop", Bool {true});
+    addParameter("ShowPreSelectedFaceOnTop", Bool {true});
+    addParameter("TransparencyOnTop", Double {0.5});
+    addParameter("MaxOnTopSelections", Int {20});
     addParameter("SelectionColor", Unsigned {0x1cad1cff});
     addParameter("UseTightBoundingBox", Bool {true});
     addParameter("RenderProjectedBBox", Bool {true});
@@ -793,6 +833,46 @@ long ViewParams::getMaxViewSelections() const
 void ViewParams::setMaxViewSelections(long v)
 {
     setValue("MaxViewSelections", v);
+}
+
+bool ViewParams::getShowSelectionOnTop() const
+{
+    return getValue<bool>("ShowSelectionOnTop");
+}
+
+void ViewParams::setShowSelectionOnTop(bool v)
+{
+    setValue("ShowSelectionOnTop", v);
+}
+
+bool ViewParams::getShowPreSelectedFaceOnTop() const
+{
+    return getValue<bool>("ShowPreSelectedFaceOnTop");
+}
+
+void ViewParams::setShowPreSelectedFaceOnTop(bool v)
+{
+    setValue("ShowPreSelectedFaceOnTop", v);
+}
+
+double ViewParams::getTransparencyOnTop() const
+{
+    return getValue<double>("TransparencyOnTop");
+}
+
+void ViewParams::setTransparencyOnTop(double v)
+{
+    setValue("TransparencyOnTop", v);
+}
+
+long ViewParams::getMaxOnTopSelections() const
+{
+    return getValue<long>("MaxOnTopSelections");
+}
+
+void ViewParams::setMaxOnTopSelections(long v)
+{
+    setValue("MaxOnTopSelections", v);
 }
 
 unsigned long ViewParams::getSelectionColor() const

@@ -32,6 +32,7 @@
 #include "SoFCUnifiedSelection.h"
 #include "View3DInventorSelection.h"
 #include "ViewProviderDocumentObject.h"
+#include "ViewParams.h"
 #include <App/Document.h>
 #include <App/GeoFeature.h>
 #include <App/GeoFeatureGroupExtension.h>
@@ -58,8 +59,9 @@ View3DInventorSelection::View3DInventorSelection(SoFCUnifiedSelection* root)
     pcGroupOnTop->addChild(pcGroupOnTopPickStyle);
 
     coin_setenv("COIN_SEPARATE_DIFFUSE_TRANSPARENCY_OVERRIDE", "1", TRUE);
-    auto pcGroupOnTopMaterial = new SoMaterial;
-    pcGroupOnTopMaterial->transparency = 0.5;
+    pcGroupOnTopMaterial = new SoMaterial;
+    pcGroupOnTopMaterial->transparency =
+        static_cast<float>(ViewParams::instance()->getTransparencyOnTop());
     pcGroupOnTopMaterial->diffuseColor.setIgnored(true);
     pcGroupOnTopMaterial->setOverride(true);
     pcGroupOnTopMaterial->setName("GroupOnTopMaterial");
@@ -94,6 +96,13 @@ View3DInventorSelection::~View3DInventorSelection()
 
 void View3DInventorSelection::checkGroupOnTop(const SelectionChanges& Reason)
 {
+    // Picked up here rather than only at construction so that changing the preference
+    // takes effect on the next selection instead of needing a restart.
+    if (pcGroupOnTopMaterial) {
+        pcGroupOnTopMaterial->transparency =
+            static_cast<float>(ViewParams::instance()->getTransparencyOnTop());
+    }
+
     if (Reason.Type == SelectionChanges::SetSelection
         || Reason.Type == SelectionChanges::ClrSelection) {
         clearGroupOnTop();
@@ -168,6 +177,13 @@ void View3DInventorSelection::checkGroupOnTop(const SelectionChanges& Reason)
     if (objs.find(key.c_str()) != objs.end()) {
         return;
     }
+
+    // Raising an unbounded number of objects on top costs a scene graph traversal each,
+    // so stop adding beyond the configured limit.
+    const auto maxOnTop = ViewParams::instance()->getMaxOnTopSelections();
+    if (maxOnTop >= 0 && objs.size() >= static_cast<std::size_t>(maxOnTop)) {
+        return;
+    }
     auto vp = freecad_cast<ViewProviderDocumentObject*>(Application::Instance->getViewProvider(obj));
     if (!vp || !vp->isSelectable() || !vp->isShow()) {
         return;
@@ -203,12 +219,21 @@ void View3DInventorSelection::checkGroupOnTop(const SelectionChanges& Reason)
         action.setColor(selectionRoot->colorHighlight.getValue());
         action.apply(pcGroupOnTopPreSel);
         if (!onTop) {
+            if (!ViewParams::instance()->getShowPreSelectedFaceOnTop()) {
+                return;
+            }
             onTop = 2;
         }
     }
     else {
         if (!onTop) {
-            return;
+            // Objects opt in through OnTopWhenSelected, which almost nothing sets, so without
+            // this the selection is only raised for datums and placements. Showing it for
+            // everything is what makes a selected shape stand out from what surrounds it.
+            if (!ViewParams::instance()->getShowSelectionOnTop()) {
+                return;
+            }
+            onTop = 1;
         }
         SoSelectionElementAction action(SoSelectionElementAction::All);
         action.setColor(selectionRoot->colorSelection.getValue());

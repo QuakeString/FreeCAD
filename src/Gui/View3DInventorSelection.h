@@ -27,6 +27,7 @@
 #include <Gui/Selection/Selection.h>
 
 class SoGroup;
+class SoMaterial;
 class SoNode;
 class SoSeparator;
 
@@ -59,6 +60,8 @@ private:
     SoGroup* pcGroupOnTopSel;
     SoGroup* pcGroupOnTopPreSel;
     SoFCUnifiedSelection* selectionRoot;
+    SoMaterial* pcGroupOnTopMaterial {nullptr};
+
     std::map<std::string, SoNode*> objectsOnTop;
     std::map<std::string, SoNode*> objectsOnTopPreSel;
     Gui::Document* guiDocument = nullptr;

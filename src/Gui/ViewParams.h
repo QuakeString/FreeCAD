@@ -143,6 +143,18 @@ public:
     long getMaxViewSelections() const;
     void setMaxViewSelections(long);
 
+    bool getShowSelectionOnTop() const;
+    void setShowSelectionOnTop(bool);
+
+    bool getShowPreSelectedFaceOnTop() const;
+    void setShowPreSelectedFaceOnTop(bool);
+
+    double getTransparencyOnTop() const;
+    void setTransparencyOnTop(double);
+
+    long getMaxOnTopSelections() const;
+    void setMaxOnTopSelections(long);
+
     unsigned long getSelectionColor() const;
     void setSelectionColor(unsigned long);
 

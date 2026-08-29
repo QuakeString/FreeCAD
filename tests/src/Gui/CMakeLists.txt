@@ -16,10 +16,12 @@ add_executable(Gui_tests_run
         InputHintTest.cpp
         SelectionTest.cpp
         ThemeManagerTest.cpp
+        ViewParamsTest.cpp
 )
 
 # Qt tests
 setup_qt_test(ObjectSelection)
+setup_qt_test(SelectionOnTop)
 setup_qt_test(QuantitySpinBox)
 
 target_link_libraries(Gui_tests_run PRIVATE
