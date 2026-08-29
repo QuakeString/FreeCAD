@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <QPalette>
+
 #include <App/Application.h>
 #include <Gui/ThemeManager.h>
 #include <src/App/InitApplication.h>
@@ -138,4 +140,30 @@ TEST_F(ThemeManagerTest, ThemesWithoutMetadataAreClassifiedByTheirName)
     EXPECT_EQ(ThemeManager::colorSchemeOf("FreeCAD Light"), ColorScheme::Light);
     EXPECT_EQ(ThemeManager::colorSchemeOf("FreeCAD Classic"), ColorScheme::Light);
     EXPECT_EQ(ThemeManager::colorSchemeOf(""), ColorScheme::Light);
+}
+
+TEST_F(ThemeManagerTest, APaletteIsClassifiedByItsContrast)
+{
+    // A dark scheme puts light text on a dark window
+    QPalette dark;
+    dark.setColor(QPalette::Window, QColor(30, 30, 30));
+    dark.setColor(QPalette::WindowText, QColor(230, 230, 230));
+
+    EXPECT_EQ(ThemeManager::colorSchemeFromPalette(dark), ColorScheme::Dark);
+
+    QPalette light;
+    light.setColor(QPalette::Window, QColor(240, 240, 240));
+    light.setColor(QPalette::WindowText, QColor(20, 20, 20));
+
+    EXPECT_EQ(ThemeManager::colorSchemeFromPalette(light), ColorScheme::Light);
+}
+
+TEST_F(ThemeManagerTest, APaletteWithoutContrastIsNotDark)
+{
+    // Nothing to tell the two apart, so the light scheme is the safer answer
+    QPalette flat;
+    flat.setColor(QPalette::Window, QColor(128, 128, 128));
+    flat.setColor(QPalette::WindowText, QColor(128, 128, 128));
+
+    EXPECT_EQ(ThemeManager::colorSchemeFromPalette(flat), ColorScheme::Light);
 }

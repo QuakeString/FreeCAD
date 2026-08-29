@@ -25,6 +25,10 @@ if(BUILD_GUI)
         list (APPEND FREECAD_QT_COMPONENTS GuiTools)
         list (APPEND FREECAD_QT_COMPONENTS SvgWidgets)
         list (APPEND FREECAD_QT_COMPONENTS OpenGLWidgets)
+        if (UNIX AND NOT APPLE)
+            # Lets the ThemeManager read the color scheme from the XDG desktop portal
+            list (APPEND FREECAD_QT_COMPONENTS DBus)
+        endif()
     endif()
 
     list (APPEND FREECAD_QT_COMPONENTS OpenGL PrintSupport Svg UiTools Widgets LinguistTools)

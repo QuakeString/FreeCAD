@@ -45,6 +45,15 @@
 # include <CoreFoundation/CoreFoundation.h>
 #endif
 
+#ifdef FC_USE_XDG_PORTAL
+# include <optional>
+
+# include <QDBusConnection>
+# include <QDBusMessage>
+# include <QDBusVariant>
+# include <QVariant>
+#endif
+
 using namespace Gui;
 
 namespace
@@ -94,6 +103,102 @@ bool hasTag(const std::vector<std::string>& tags, const std::string& word)
 
     return std::any_of(tags.begin(), tags.end(), isWord);
 }
+
+#ifdef FC_USE_XDG_PORTAL
+constexpr const char* PortalService = "org.freedesktop.portal.Desktop";
+constexpr const char* PortalPath = "/org/freedesktop/portal/desktop";
+constexpr const char* PortalSettings = "org.freedesktop.portal.Settings";
+constexpr const char* AppearanceNamespace = "org.freedesktop.appearance";
+constexpr const char* ColorSchemeKey = "color-scheme";
+
+// What the portal answers with. 0 stands for "no preference" and is left to the caller.
+constexpr uint PreferDark = 1;
+constexpr uint PreferLight = 2;
+
+/// The portal hands the value over wrapped in one or two variants
+QVariant unwrapVariant(QVariant value)
+{
+    while (value.canConvert<QDBusVariant>()) {
+        value = value.value<QDBusVariant>().variant();
+    }
+
+    return value;
+}
+
+/// Asks the XDG desktop portal which color scheme the desktop prefers
+std::optional<ColorScheme> readPortalColorScheme()
+{
+    auto bus = QDBusConnection::sessionBus();
+
+    if (!bus.isConnected()) {
+        return std::nullopt;
+    }
+
+    // Built by hand rather than through QDBusInterface, which would introspect the portal on
+    // construction and so block startup for a round trip that is of no use here.
+    const auto callPortal = [&bus](const char* method) {
+        QDBusMessage call = QDBusMessage::createMethodCall(QString::fromLatin1(PortalService),
+                                                          QString::fromLatin1(PortalPath),
+                                                          QString::fromLatin1(PortalSettings),
+                                                          QString::fromLatin1(method));
+        call.setArguments({QString::fromLatin1(AppearanceNamespace),
+                           QString::fromLatin1(ColorSchemeKey)});
+
+        // A desktop that never answers must not hold up the whole application
+        constexpr int timeoutMs = 1000;
+
+        return bus.call(call, QDBus::Block, timeoutMs);
+    };
+
+    // ReadOne is the current call. Portals that predate it only know Read, which answers with
+    // the value wrapped in one more variant.
+    QDBusMessage reply = callPortal("ReadOne");
+
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        reply = callPortal("Read");
+    }
+
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        return std::nullopt;
+    }
+
+    bool isNumber = false;
+    const uint preference = unwrapVariant(reply.arguments().constFirst()).toUInt(&isNumber);
+
+    if (!isNumber) {
+        return std::nullopt;
+    }
+
+    if (preference == PreferDark) {
+        return ColorScheme::Dark;
+    }
+    if (preference == PreferLight) {
+        return ColorScheme::Light;
+    }
+
+    return std::nullopt;  // no preference, so let the palette decide
+}
+
+// The answer only changes when the portal says so, and asking blocks on a round trip, so it is
+// kept until the SettingChanged signal arrives.
+std::optional<ColorScheme> portalScheme;
+bool portalSchemeKnown = false;
+
+std::optional<ColorScheme> portalColorScheme()
+{
+    if (!portalSchemeKnown) {
+        portalScheme = readPortalColorScheme();
+        portalSchemeKnown = true;
+    }
+
+    return portalScheme;
+}
+
+void forgetPortalColorScheme()
+{
+    portalSchemeKnown = false;
+}
+#endif  // FC_USE_XDG_PORTAL
 }  // namespace
 
 ThemeManager* ThemeManager::_instance = nullptr;
@@ -211,6 +316,15 @@ void ThemeManager::setTheme(ColorScheme scheme, const std::string& themeName)
     parameters()->SetASCII(scheme == ColorScheme::Dark ? DarkThemeKey : LightThemeKey, themeName);
 }
 
+ColorScheme ThemeManager::colorSchemeFromPalette(const QPalette& palette)
+{
+    // A dark scheme paints light text onto a dark window, a light one does the opposite
+    const auto text = palette.color(QPalette::WindowText);
+    const auto window = palette.color(QPalette::Window);
+
+    return text.lightness() > window.lightness() ? ColorScheme::Dark : ColorScheme::Light;
+}
+
 ColorScheme ThemeManager::systemColorScheme()
 {
     if (!qApp) {
@@ -221,9 +335,26 @@ ColorScheme ThemeManager::systemColorScheme()
     // https://www.qt.io/blog/dark-mode-on-windows-11-with-qt-6.5
     const auto scheme = QGuiApplication::styleHints()->colorScheme();
 
-    return scheme == Qt::ColorScheme::Dark ? ColorScheme::Dark : ColorScheme::Light;
-#else
-# ifdef FC_OS_MACOSX
+    if (scheme == Qt::ColorScheme::Dark) {
+        return ColorScheme::Dark;
+    }
+    if (scheme == Qt::ColorScheme::Light) {
+        return ColorScheme::Light;
+    }
+    // Qt reports Qt::ColorScheme::Unknown when no platform theme supplies a scheme, which is
+    // what a Qt built without the GTK platform theme plugin does on GNOME. Fall through and
+    // find the scheme elsewhere rather than call that light.
+#endif
+
+#ifdef FC_USE_XDG_PORTAL
+    // Every desktop that implements the appearance portal answers this, whichever platform
+    // theme Qt happens to have loaded.
+    if (const auto preferred = portalColorScheme()) {
+        return *preferred;
+    }
+#endif
+
+#ifdef FC_OS_MACOSX
     auto key = CFSTR("AppleInterfaceStyle");
     if (auto value = CFPreferencesCopyAppValue(key, kCFPreferencesAnyApplication)) {
         bool dark = false;
@@ -236,14 +367,10 @@ ColorScheme ThemeManager::systemColorScheme()
             return ColorScheme::Dark;
         }
     }
-# endif  // FC_OS_MACOSX
-    // Deduce the color scheme from the palette the platform theme provides
-    const QPalette defaultPalette;
-    const auto text = defaultPalette.color(QPalette::WindowText);
-    const auto window = defaultPalette.color(QPalette::Window);
+#endif  // FC_OS_MACOSX
 
-    return text.lightness() > window.lightness() ? ColorScheme::Dark : ColorScheme::Light;
-#endif   // QT_VERSION >= 6.5
+    // Deduce the color scheme from the palette the platform theme provides
+    return colorSchemeFromPalette(QPalette());
 }
 
 ColorScheme ThemeManager::colorScheme() const
@@ -403,6 +530,22 @@ bool ThemeManager::eventFilter(QObject* watched, QEvent* event)
     return QObject::eventFilter(watched, event);
 }
 
+void ThemeManager::onPortalSettingChanged(const QString& nameSpace, const QString& key)
+{
+#ifdef FC_USE_XDG_PORTAL
+    if (nameSpace != QString::fromLatin1(AppearanceNamespace)
+        || key != QString::fromLatin1(ColorSchemeKey)) {
+        return;
+    }
+
+    forgetPortalColorScheme();
+    onSystemColorSchemeChanged();
+#else
+    Q_UNUSED(nameSpace)
+    Q_UNUSED(key)
+#endif
+}
+
 void ThemeManager::onSystemColorSchemeChanged()
 {
     if (mode() != ThemeMode::System) {
@@ -438,6 +581,24 @@ void ThemeManager::init()
     // light and dark is the palette the platform theme hands over to the application.
     if (qApp) {
         qApp->installEventFilter(this);
+    }
+#endif
+
+#ifdef FC_USE_XDG_PORTAL
+    // QStyleHints::colorSchemeChanged stays silent when Qt never learned the scheme to begin
+    // with, so follow the portal directly as well. Its signal carries a third argument that
+    // the slot leaves out, because the value is read back anyway.
+    if (auto bus = QDBusConnection::sessionBus(); bus.isConnected()) {
+        const bool subscribed = bus.connect(QString::fromLatin1(PortalService),
+                                            QString::fromLatin1(PortalPath),
+                                            QString::fromLatin1(PortalSettings),
+                                            QStringLiteral("SettingChanged"),
+                                            this,
+                                            SLOT(onPortalSettingChanged(QString, QString)));
+
+        if (!subscribed) {
+            Base::Console().log("Theme: not following the color scheme of the desktop portal\n");
+        }
     }
 #endif
 

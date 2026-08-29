@@ -31,6 +31,8 @@
 #include <FCGlobal.h>
 #include <Base/Parameter.h>
 
+class QPalette;
+
 namespace Gui
 {
 
@@ -88,6 +90,11 @@ public:
     /// Color scheme currently reported by the operating system
     static ColorScheme systemColorScheme();
 
+    /** Color scheme a palette belongs to, judged by how light its text is against its
+     * window. Used when the platform cannot report a color scheme of its own.
+     */
+    static ColorScheme colorSchemeFromPalette(const QPalette& palette);
+
     /// Color scheme resulting from the current mode
     ColorScheme colorScheme() const;
 
@@ -129,6 +136,12 @@ Q_SIGNALS:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+
+private Q_SLOTS:
+    /** Reacts to the XDG desktop portal announcing a changed setting. Only the two leading
+     * arguments of its SettingChanged signal are taken, the new value is read back instead.
+     */
+    void onPortalSettingChanged(const QString& nameSpace, const QString& key);
 
 private:
     ThemeManager();

@@ -142,6 +142,13 @@ if (WIN32)
     endif()
 endif()
 
+if (UNIX AND NOT APPLE AND FREECAD_QT_MAJOR_VERSION EQUAL 6 AND TARGET Qt6::DBus)
+    # Qt only reports a color scheme when a platform theme supplies one, so on Unix the
+    # ThemeManager asks the XDG desktop portal itself. See ThemeManager.cpp.
+    list(APPEND FreeCADGui_LIBS Qt6::DBus)
+    target_compile_definitions(FreeCADGui PRIVATE FC_USE_XDG_PORTAL)
+endif()
+
 target_include_directories(
     FreeCADGui
     SYSTEM
