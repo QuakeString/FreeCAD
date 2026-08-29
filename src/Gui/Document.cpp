@@ -68,6 +68,7 @@
 #include "View3DInventor.h"
 #include "View3DInventorViewer.h"
 #include "ViewProviderDocumentObject.h"
+#include "ViewParams.h"
 #include "ViewProviderDocumentObjectGroup.h"
 #include "WaitCursor.h"
 
@@ -2371,6 +2372,11 @@ MDIView* Document::createView(const Base::Type& typeId, CreateViewMode mode)
             auto firstView = static_cast<View3DInventor*>(theViews.front());
             std::string overrideMode = firstView->getViewer()->getOverrideMode();
             view3D->getViewer()->setOverrideMode(overrideMode);
+        }
+        else if (const long style = ViewParams::instance()->getDefaultDrawStyle(); style != 0) {
+            // Nothing to inherit from, so the first view of a document opens in the draw style
+            // the user chose. Zero is "As Is", which is what the viewer already shows.
+            view3D->getViewer()->setOverrideMode(ViewParams::drawStyleName(style));
         }
 
         // attach the viewproviders. we need to make sure that we only attach the toplevel ones

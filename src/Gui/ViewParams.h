@@ -155,6 +155,14 @@ public:
     long getMaxOnTopSelections() const;
     void setMaxOnTopSelections(long);
 
+    long getDefaultDrawStyle() const;
+    void setDefaultDrawStyle(long);
+
+    /** Draw style a stored DefaultDrawStyle refers to, as the viewer names its override
+     * modes. Anything outside the known styles reads as the untouched "As Is".
+     */
+    static const char* drawStyleName(long index);
+
     unsigned long getSelectionColor() const;
     void setSelectionColor(unsigned long);
 

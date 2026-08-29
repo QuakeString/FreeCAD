@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <set>
+#include <string>
 
 #include <App/Application.h>
 #include <Gui/ViewParams.h>
@@ -27,6 +29,7 @@ protected:
         showPreSelectedFaceOnTop = params->getShowPreSelectedFaceOnTop();
         transparencyOnTop = params->getTransparencyOnTop();
         maxOnTopSelections = params->getMaxOnTopSelections();
+        defaultDrawStyle = params->getDefaultDrawStyle();
     }
 
     void TearDown() override
@@ -35,11 +38,13 @@ protected:
         params->setShowPreSelectedFaceOnTop(showPreSelectedFaceOnTop);
         params->setTransparencyOnTop(transparencyOnTop);
         params->setMaxOnTopSelections(maxOnTopSelections);
+        params->setDefaultDrawStyle(defaultDrawStyle);
     }
 
     ViewParams* params = nullptr;
 
 private:
+    long defaultDrawStyle = 0;
     bool showSelectionOnTop = true;
     bool showPreSelectedFaceOnTop = true;
     double transparencyOnTop = 0.5;
@@ -48,12 +53,25 @@ private:
 
 TEST_F(ViewParamsTest, DefaultsMatchTheBranchTheyCameFrom)  // NOLINT
 {
+    // A ViewParams reads the parameters of whoever is running the test, so the keys have to go
+    // before the defaults can be observed. Without this the test passes or fails according to
+    // whether the person running it has ever touched these settings.
+    auto group =
+        App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/View");
+    group->RemoveBool("ShowSelectionOnTop");
+    group->RemoveBool("ShowPreSelectedFaceOnTop");
+    group->RemoveFloat("TransparencyOnTop");
+    group->RemoveInt("MaxOnTopSelections");
+    group->RemoveInt("DefaultDrawStyle");
+
     ViewParams fresh;
 
     EXPECT_TRUE(fresh.getShowSelectionOnTop());
     EXPECT_TRUE(fresh.getShowPreSelectedFaceOnTop());
     EXPECT_DOUBLE_EQ(fresh.getTransparencyOnTop(), 0.5);
     EXPECT_EQ(fresh.getMaxOnTopSelections(), 20);
+    // Zero is "As Is": a new document opens exactly as it does today unless asked otherwise
+    EXPECT_EQ(fresh.getDefaultDrawStyle(), 0);
 }
 
 TEST_F(ViewParamsTest, BooleansRoundTripBothWays)  // NOLINT
@@ -146,4 +164,46 @@ TEST_F(ViewParamsTest, TheInstanceIsShared)  // NOLINT
     ViewParams::instance()->setMaxOnTopSelections(42);
     EXPECT_EQ(ViewParams::instance()->getMaxOnTopSelections(), 42);
     EXPECT_EQ(params, ViewParams::instance());
+}
+
+TEST_F(ViewParamsTest, EveryDrawStyleIndexNamesTheStyleTheMenuOffers)  // NOLINT
+{
+    // These names are the override modes the viewer understands, and the order is the order of
+    // the draw style commands in CommandView.cpp. If either side is reordered the preference
+    // silently starts selecting a different style, which is what this pins down.
+    EXPECT_STREQ(ViewParams::drawStyleName(0), "As Is");
+    EXPECT_STREQ(ViewParams::drawStyleName(1), "Point");
+    EXPECT_STREQ(ViewParams::drawStyleName(2), "Wireframe");
+    EXPECT_STREQ(ViewParams::drawStyleName(3), "Hidden Line");
+    EXPECT_STREQ(ViewParams::drawStyleName(4), "No Shading");
+    EXPECT_STREQ(ViewParams::drawStyleName(5), "Shaded");
+    EXPECT_STREQ(ViewParams::drawStyleName(6), "Flat Lines");
+}
+
+TEST_F(ViewParamsTest, AnUnknownDrawStyleIndexLeavesTheViewAlone)  // NOLINT
+{
+    // A number from a newer version, a hand edited parameter or a negative value must not put
+    // the viewer into some arbitrary style.
+    for (const long index : {-1L, 7L, 99L, std::numeric_limits<long>::max()}) {
+        EXPECT_STREQ(ViewParams::drawStyleName(index), "As Is");
+    }
+}
+
+TEST_F(ViewParamsTest, TheDrawStyleRoundTrips)  // NOLINT
+{
+    for (long index = 0; index <= 6; ++index) {
+        params->setDefaultDrawStyle(index);
+        EXPECT_EQ(params->getDefaultDrawStyle(), index);
+    }
+}
+
+TEST_F(ViewParamsTest, EveryDrawStyleNameIsDistinct)  // NOLINT
+{
+    // Two indexes naming the same style would mean one of the menu entries is unreachable
+    // through the preference.
+    std::set<std::string> names;
+    for (long index = 0; index <= 6; ++index) {
+        names.insert(ViewParams::drawStyleName(index));
+    }
+    EXPECT_EQ(names.size(), 7U);
 }

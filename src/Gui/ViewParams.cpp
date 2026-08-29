@@ -389,6 +389,15 @@ void ViewParams::setup()
     );
 
     static_assert(
+        Base::is_getter<decltype(&ViewParams::getDefaultDrawStyle), Int::value_type>,
+        "Mismatching signature"
+    );
+    static_assert(
+        Base::is_setter<decltype(&ViewParams::setDefaultDrawStyle), Int::value_type>,
+        "Mismatching signature"
+    );
+
+    static_assert(
         Base::is_getter<decltype(&ViewParams::getSelectionColor), Unsigned::value_type>,
         "Mismatching signature"
     );
@@ -455,6 +464,7 @@ void ViewParams::setup()
     addParameter("ShowPreSelectedFaceOnTop", Bool {true});
     addParameter("TransparencyOnTop", Double {0.5});
     addParameter("MaxOnTopSelections", Int {20});
+    addParameter("DefaultDrawStyle", Int {0});
     addParameter("SelectionColor", Unsigned {0x1cad1cff});
     addParameter("UseTightBoundingBox", Bool {true});
     addParameter("RenderProjectedBBox", Bool {true});
@@ -873,6 +883,38 @@ long ViewParams::getMaxOnTopSelections() const
 void ViewParams::setMaxOnTopSelections(long v)
 {
     setValue("MaxOnTopSelections", v);
+}
+
+long ViewParams::getDefaultDrawStyle() const
+{
+    return getValue<long>("DefaultDrawStyle");
+}
+
+void ViewParams::setDefaultDrawStyle(long v)
+{
+    setValue("DefaultDrawStyle", v);
+}
+
+const char* ViewParams::drawStyleName(long index)
+{
+    // Kept in step with the order of the draw style commands in CommandView.cpp, which is what
+    // the stored number indexes into.
+    switch (index) {
+        case 1:
+            return "Point";
+        case 2:
+            return "Wireframe";
+        case 3:
+            return "Hidden Line";
+        case 4:
+            return "No Shading";
+        case 5:
+            return "Shaded";
+        case 6:
+            return "Flat Lines";
+        default:
+            return "As Is";
+    }
 }
 
 unsigned long ViewParams::getSelectionColor() const
