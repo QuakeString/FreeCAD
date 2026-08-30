@@ -459,6 +459,67 @@ bounding box size of the 3D object that is currently displayed.</string>
           </item>
          </widget>
         </item>
+        <item row="7" column="0">
+         <widget class="QLabel" name="defaultDrawStyleLabel">
+          <property name="text">
+           <string>Default draw style</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="1">
+         <widget class="Gui::PrefComboBox" name="comboDefaultDrawStyle">
+          <property name="minimumSize">
+           <size>
+            <width>120</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>Draw style the first view of a document opens in. Further views keep following the view they were opened beside.</string>
+          </property>
+          <property name="prefEntry" stdset="0">
+           <cstring>DefaultDrawStyle</cstring>
+          </property>
+          <property name="prefPath" stdset="0">
+           <cstring>View</cstring>
+          </property>
+          <item>
+           <property name="text">
+            <string>As is</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Points</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Wireframe</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Hidden line</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>No shading</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Shaded</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Flat lines</string>
+           </property>
+          </item>
+         </widget>
+        </item>
         <item row="2" column="0">
          <widget class="QLabel" name="transparentRenderLabel">
           <property name="toolTip">
