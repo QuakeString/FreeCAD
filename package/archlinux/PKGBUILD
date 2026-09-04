@@ -46,6 +46,7 @@ depends=(
   pyside6
   python
   python-defusedxml
+  python-lark-parser
   python-matplotlib
   python-numpy
   python-packaging
