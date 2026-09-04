@@ -81,6 +81,7 @@
 #include <Base/CrashReporter/Manager.h>
 #include <Base/CrashReporter/Writer.h>
 #include <Base/ConsoleObserver.h>
+#include <Base/StartupTimer.h>
 #include <Base/ServiceProvider.h>
 #include <Base/CoordinateSystemPy.h>
 #include <Base/Exception.h>
@@ -2120,15 +2121,24 @@ void Application::init(int argc, char ** argv)
         Base::SystemHandler::installNewHandler();
         Base::SystemHandler::installSegfaultHandler();
 
-        initTypes();
+        {
+            Base::StartupTimer timer("core: register types");
+            initTypes();
+        }
 
-        initConfig(argc,argv);
+        {
+            Base::StartupTimer timer("core: config and parameters");
+            initConfig(argc,argv);
+        }
 
         // Set up our crash reporting AFTER the call to initConfig, but BEFORE we start doing
         // things that might crash...
         initCrashReporter();
 
-        initApplication();
+        {
+            Base::StartupTimer timer("core: application and init script");
+            initApplication();
+        }
         initExceptions();
     }
     catch (...) {
@@ -2866,6 +2876,9 @@ void Application::initConfig(int argc, char ** argv)
     }
     else
         _pConsoleObserverFile = nullptr;
+
+    // Only now is there somewhere for the phases timed so far to be written
+    Base::StartupTimer::flushDeferred();
 
     App::installConsoleQtBridge();
     App::installTranslationQtBridge();

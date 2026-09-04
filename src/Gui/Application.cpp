@@ -56,6 +56,8 @@
 #include <App/DocumentObjectPy.h>
 #include <App/MainThreadSignal.h>
 #include <Base/Console.h>
+#include <Base/StartupTimer.h>
+#include <memory>
 #include <Base/Interpreter.h>
 #include <Base/Exception.h>
 #include <Base/FileInfo.h>
@@ -2652,7 +2654,11 @@ void Application::runApplication()
     Base::Console().log("Init: Creating Gui::Application and QApplication\n");
 
     int argc = App::Application::GetARGC();
+    // Cannot be scoped: the QApplication has to outlive this whole function. This is where the
+    // platform plugin loads and the OpenGL context is first created.
+    auto qtTimer = std::make_unique<Base::StartupTimer>("gui: QApplication and OpenGL");
     GUISingleApplication mainApp(argc, App::Application::GetARGV());
+    qtTimer.reset();
 
 #if (COIN_MAJOR_VERSION * 100 + COIN_MINOR_VERSION * 10 + COIN_MICRO_VERSION < 406) \
     && (defined(FC_OS_LINUX) || defined(FC_OS_BSD))
@@ -2675,11 +2681,19 @@ void Application::runApplication()
 
     setAppNameAndIcon();
 
-    StartupProcess process;
-    process.execute();
+    {
+        Base::StartupTimer timer("gui: paths, styles and dialogs");
+        StartupProcess process;
+        process.execute();
+    }
 
+    auto appTimer = std::make_unique<Base::StartupTimer>("gui: application and view providers");
     Application app(true);
+    appTimer.reset();
+
+    auto windowTimer = std::make_unique<Base::StartupTimer>("gui: main window and panels");
     MainWindow mw;
+    windowTimer.reset();
     mw.setProperty("QuitOnClosed", true);
 
     // Destroy deferred views while their GUI and Python owners are still alive.

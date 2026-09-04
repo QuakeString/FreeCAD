@@ -244,6 +244,7 @@ SET(FreeCADBase_CPP_SRCS
     Sequencer.cpp
     ServiceProvider.cpp
     SmartPtrPy.cpp
+    StartupTimer.cpp
     Stream.cpp
     StringUtils.cpp
     Swap.cpp
@@ -314,6 +315,7 @@ SET(FreeCADBase_HPP_SRCS
     ServiceProvider.h
     Sequencer.h
     SmartPtrPy.h
+    StartupTimer.h
     Stream.h
     StringUtils.h
     Swap.h

@@ -58,7 +58,10 @@
 
 #include <App/Application.h>
 #include <App/ApplicationDirectories.h>
+#include <memory>
+
 #include <Base/Console.h>
+#include <Base/StartupTimer.h>
 
 
 using namespace Gui;
@@ -222,21 +225,67 @@ void StartupPostProcess::setLoadFromPythonModule(bool value)
 
 void StartupPostProcess::execute()
 {
-    setWindowTitle();
-    setProcessMessages();
-    setAutoSaving();
-    checkQtSvgImageFormatSupport();
-    setToolBarIconSize();
-    setWheelEventFilter();
-    setLocale();
-    setCursorFlashing();
-    setQtStyle();
-    setStyleSheet();
-    checkOpenGL();
-    loadOpenInventor();
-    setBranding();
-    showMainWindow();
+    // The whole of it, logged even if a phase returns early. The version migration dialog is
+    // left out, as it waits for the user and would otherwise be charged to startup.
+    auto whole = std::make_unique<Base::StartupTimer>("GUI startup in all");
+    {
+        Base::StartupTimer timer("setWindowTitle");
+        setWindowTitle();
+    }
+    {
+        Base::StartupTimer timer("setProcessMessages");
+        setProcessMessages();
+    }
+    {
+        Base::StartupTimer timer("setAutoSaving");
+        setAutoSaving();
+    }
+    {
+        Base::StartupTimer timer("checkQtSvgImageFormatSupport");
+        checkQtSvgImageFormatSupport();
+    }
+    {
+        Base::StartupTimer timer("setToolBarIconSize");
+        setToolBarIconSize();
+    }
+    {
+        Base::StartupTimer timer("setWheelEventFilter");
+        setWheelEventFilter();
+    }
+    {
+        Base::StartupTimer timer("setLocale");
+        setLocale();
+    }
+    {
+        Base::StartupTimer timer("setCursorFlashing");
+        setCursorFlashing();
+    }
+    {
+        Base::StartupTimer timer("setQtStyle");
+        setQtStyle();
+    }
+    {
+        Base::StartupTimer timer("setStyleSheet");
+        setStyleSheet();
+    }
+    {
+        Base::StartupTimer timer("checkOpenGL");
+        checkOpenGL();
+    }
+    {
+        Base::StartupTimer timer("loadOpenInventor");
+        loadOpenInventor();
+    }
+    {
+        Base::StartupTimer timer("setBranding");
+        setBranding();
+    }
+    {
+        Base::StartupTimer timer("showMainWindow");
+        showMainWindow();
+    }
     try {
+        Base::StartupTimer timer("activateWorkbench");
         activateWorkbench();
     }
     catch (...) {
@@ -245,7 +294,11 @@ void StartupPostProcess::execute()
         throw;
     }
     mainWindow->stopSplasher();
-    checkParameters();
+    {
+        Base::StartupTimer timer("checkParameters");
+        checkParameters();
+    }
+    whole.reset();
     checkVersionMigration();
 }
 
@@ -519,20 +572,30 @@ void StartupPostProcess::activateWorkbench()
     // Call this before showing the main window because otherwise:
     // 1. it shows a white window for a few seconds which doesn't look nice
     // 2. the layout of the toolbars is completely broken
-    guiApp.activateWorkbench(start.c_str());
+    {
+        Base::StartupTimer timer("  activate start workbench");
+        guiApp.activateWorkbench(start.c_str());
+    }
 
     // show the main window
     if (!Application::hiddenMainWindow()) {
         Base::Console().log("Init: Showing main window\n");
+        Base::StartupTimer timer("  show main window");
         mainWindow->loadWindowSettings();
     }
 
     // Now run the background autoload, for workbenches that should be loaded at startup, but not
     // displayed to the user immediately
-    autoloadModules(wb);
+    {
+        Base::StartupTimer timer("  autoload modules");
+        autoloadModules(wb);
+    }
 
     // Reactivate the startup workbench
-    guiApp.activateWorkbench(start.c_str());
+    {
+        Base::StartupTimer timer("  reactivate workbench");
+        guiApp.activateWorkbench(start.c_str());
+    }
 }
 
 void StartupPostProcess::setStyleSheet()
