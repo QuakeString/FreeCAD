@@ -60,6 +60,9 @@ PROPERTY_SOURCE_WITH_EXTENSIONS(PartDesignGui::ViewProvider, PartGui::ViewProvid
 
 ViewProvider::ViewProvider()
 {
+    // A PartDesign feature is built on the one before it, so a face it did not
+    // paint itself keeps the appearance it was given further down the tree.
+    MapFaceColor.setValue(true);
     ViewProviderSuppressibleExtension::initExtension(this);
     ViewProviderAttachExtension::initExtension(this);
     ViewProviderPreviewExtension::initExtension(this);

@@ -33,6 +33,7 @@
 #include <Gui/ViewProviderGeometryObject.h>
 #include <Gui/ViewProviderTextureExtension.h>
 
+#include <Mod/Part/App/ElementAppearance.h>
 #include <Mod/Part/App/PartFeature.h>
 #include <Mod/Part/PartGlobal.h>
 
@@ -91,6 +92,27 @@ public:
     App::PropertyColor LineColor;
     App::PropertyMaterial LineMaterial;
     App::PropertyColorList LineColorArray;
+
+    /** @name Per-element appearance
+     * ShapeAppearance is a positional cache: entry i is the material of Face(i+1) and is what
+     * the scene graph renders. The durable state is the feature's ColoredElements element
+     * references paired with MappedAppearance, plus BaseAppearance for every element without
+     * an override. regenerateAppearance() rebuilds the cache from that state whenever the
+     * shape or the overrides change, so a colour follows its face through a topology change.
+     */
+    //@{
+    /// Material of every element that has no override.
+    App::PropertyMaterial BaseAppearance;
+    /// One material per entry of the feature's ColoredElements property, same order.
+    App::PropertyMaterialList MappedAppearance;
+    /** Inherit the appearance of faces this feature did not paint itself.
+     *
+     * A face with no override of its own takes the override the feature it came from
+     * gave it, so a pad's painted face stays painted through the pocket that follows.
+     * Off by default; PartDesign features turn it on.
+     */
+    App::PropertyBool MapFaceColor;
+    //@}
 
     void attach(App::DocumentObject*) override;
     void setDisplayMode(const char* ModeName) override;
@@ -153,6 +175,18 @@ public:
      */
     //@{
     std::map<std::string, Base::Color> getElementColors(const char* element = nullptr) const override;
+    void setElementColors(const std::map<std::string, Base::Color>& colors) override;
+    /// The element overrides: element name as stored in ColoredElements to its material.
+    std::map<std::string, App::Material> getElementAppearances() const;
+    /** Replace the element overrides.
+     *
+     * Keys are indexed ("Face2") or mapped element names. The key "Face" sets
+     * BaseAppearance, "Edge" and "Vertex" set the line and point colours. Elements
+     * that are not listed lose their override.
+     */
+    void setElementAppearances(const std::map<std::string, App::Material>& appearances);
+    /// Rebuild ShapeAppearance from BaseAppearance and the element overrides.
+    void regenerateAppearance();
     //@}
 
     bool isUpdateForced() const override
@@ -250,6 +284,26 @@ private:
     // This is needed to restore old DiffuseColor values since the restore
     // function is asynchronous
     App::PropertyColorList _diffuseColor;
+
+    /// Set while regenerateAppearance() writes ShapeAppearance, so onChanged() does not read
+    /// the write back as an external positional edit.
+    bool regeneratingAppearance = false;
+    /// Whether the current ShapeAppearance list was written from the element overrides.
+    /// Only a list this view provider produced may be thrown away again.
+    bool ownsPositionalAppearance = false;
+
+    void writeElementAppearances(
+        const std::vector<std::string>& elements,
+        const std::vector<App::Material>& materials,
+        bool collapseWhenEmpty = true
+    );
+    void adoptPositionalAppearance();
+    void resetPositionalAppearance();
+    void refreshDependentAppearances();
+    Part::ElementMaterialMap inheritedAppearances(
+        const Part::TopoShape& shape,
+        const Part::ElementMaterialMap& own
+    ) const;
 
     // shape that was last rendered so if it does not change we don't re-render it without need
     TopoDS_Shape lastRenderedShape;

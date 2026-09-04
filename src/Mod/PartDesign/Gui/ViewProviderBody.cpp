@@ -414,7 +414,11 @@ void ViewProviderBody::unifyVisualProperty(const App::Property* prop)
     }
 
     if (prop == &Visibility || prop == &Selectable || prop == &DisplayModeBody
-        || prop == &PointColorArray || prop == &ShowPlacement || prop == &LineColorArray) {
+        || prop == &PointColorArray || prop == &ShowPlacement || prop == &LineColorArray
+        || prop == &MappedAppearance || prop == &MapFaceColor) {
+        // MappedAppearance pairs with each feature's own ColoredElements, and
+        // MapFaceColor says whether a feature inherits from the one before it.
+        // Pasting either from the body would break every feature's overrides.
         return;
     }
 
@@ -438,6 +442,15 @@ void ViewProviderBody::unifyVisualProperty(const App::Property* prop)
 
         // copy over the properties data
         if (Gui::ViewProvider* vp = gdoc->getViewProvider(feature)) {
+            if (prop == &ShapeAppearance) {
+                // Only the body's base appearance carries over. Its per-face list
+                // is indexed for the tip's shape, so pasting it whole would land
+                // colours on unrelated faces of the other features.
+                if (auto fvp = freecad_cast<PartGui::ViewProviderPartExt*>(vp)) {
+                    fvp->ShapeAppearance.setValues({ShapeAppearance[0]});
+                }
+                continue;
+            }
             if (auto fprop = vp->getPropertyByName(prop->getName())) {
                 fprop->Paste(*prop);
             }

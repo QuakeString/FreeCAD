@@ -148,3 +148,28 @@ foreach (exe ${TestExecutables})
         gtest_discover_tests(${exe})
     endif()
 endforeach()
+
+# Python tests that need the whole application. Each runs one test module in the GUI
+# binary, offscreen and with a private user home, so nothing of the user's setup is read
+# or written. The binary exits non-zero when a test fails.
+# Each of these runs one Python test module inside the GUI binary, offscreen and with
+# a private user home, so nothing of the developer's own setup is read or written. The
+# home directory has to exist: the binary waits for a first-run dialog without it.
+# The binary exits non-zero when a test fails.
+function(setup_gui_python_test _name _module)
+    set(_home ${CMAKE_BINARY_DIR}/tests/userhome/${_name})
+    file(MAKE_DIRECTORY ${_home})
+    add_test(NAME ${_name} COMMAND FreeCADMain -t ${_module})
+    set_tests_properties(${_name} PROPERTIES
+        LABELS "Gui;Python"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;FREECAD_USER_HOME=${_home}")
+endfunction()
+
+if(BUILD_GUI AND BUILD_PART)
+    setup_gui_python_test(Part_ElementAppearance_GuiTests parttests.ElementAppearanceTest)
+endif()
+
+if(BUILD_GUI AND BUILD_PART AND BUILD_PART_DESIGN AND BUILD_SKETCHER)
+    setup_gui_python_test(PartDesign_ElementAppearance_GuiTests
+        PartDesignTests.TestElementAppearance)
+endif()

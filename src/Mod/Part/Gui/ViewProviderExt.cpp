@@ -76,6 +76,7 @@
 #include <Base/TimeInfo.h>
 #include <Base/Tools.h>
 
+#include <Gui/Application.h>
 #include <Gui/BitmapFactory.h>
 #include <Gui/Control.h>
 #include <Gui/Selection/SoFCSelectionAction.h>
@@ -83,6 +84,7 @@
 #include <Gui/ViewParams.h>
 #include <Gui/Utilities.h>
 
+#include <Mod/Part/App/ElementAppearance.h>
 #include <Mod/Part/App/ShapeMapHasher.h>
 #include <Mod/Part/App/Tools.h>
 
@@ -184,6 +186,27 @@ ViewProviderPartExt::ViewProviderPartExt()
         osgroup,
         App::Prop_None,
         "Object line color array."
+    );
+    ADD_PROPERTY_TYPE(
+        BaseAppearance,
+        (ShapeAppearance[0]),
+        osgroup,
+        App::Prop_Hidden,
+        "Appearance of every element without an override."
+    );
+    ADD_PROPERTY_TYPE(
+        MappedAppearance,
+        (std::vector<App::Material>()),
+        osgroup,
+        App::PropertyType(App::Prop_Hidden | App::Prop_ReadOnly),
+        "One appearance per element listed in the object's ColoredElements property."
+    );
+    ADD_PROPERTY_TYPE(
+        MapFaceColor,
+        (false),
+        osgroup,
+        App::Prop_Hidden,
+        "Take the appearance of faces inherited from the feature this one is built on."
     );
     ADD_PROPERTY_TYPE(LineWidth, (lwidth), osgroup, App::Prop_None, "Set object line width.");
     LineWidth.setConstraints(&sizeRange);
@@ -403,6 +426,19 @@ void ViewProviderPartExt::onChanged(const App::Property* prop)
     else if (prop == &ShapeAppearance) {
         setHighlightedFaces(ShapeAppearance);
         ViewProviderGeometryObject::onChanged(prop);
+        if (!regeneratingAppearance && !isRestoring()) {
+            // Written by a script, an older code path or the property editor:
+            // read it back into the base and the element overrides.
+            adoptPositionalAppearance();
+        }
+    }
+    else if (prop == &BaseAppearance || prop == &MappedAppearance) {
+        if (!prop->testStatus(App::Property::User3)) {
+            regenerateAppearance();
+        }
+    }
+    else if (prop == &MapFaceColor) {
+        regenerateAppearance();
     }
     else if (prop == &Transparency) {
         const App::Material& Mat = ShapeAppearance[0];
@@ -747,12 +783,41 @@ std::map<std::string, Base::Color> ViewProviderPartExt::getElementColors(const c
     std::map<std::string, Base::Color> ret;
 
     if (!element || !element[0]) {
-        auto color = ShapeAppearance.getDiffuseColor();
-        color.setTransparency(ShapeAppearance.getTransparency());
+        const auto& base = BaseAppearance.getValue();
+        auto color = base.diffuseColor;
+        color.setTransparency(base.transparency);
         ret["Face"] = color;
         ret["Edge"] = LineColor.getValue();
         ret["Vertex"] = PointColor.getValue();
+        for (const auto& [name, material] : getElementAppearances()) {
+            auto elementColor = material.diffuseColor;
+            elementColor.setTransparency(material.transparency);
+            ret[name] = elementColor;
+        }
+        // Faces that differ from the base without an override of their own: what
+        // this feature inherited from the features it was built on.
+        for (int i = 0; i < ShapeAppearance.getSize(); ++i) {
+            const auto& material = ShapeAppearance[i];
+            if (Part::sameMaterial(material, base)) {
+                continue;
+            }
+            auto elementColor = material.diffuseColor;
+            elementColor.setTransparency(material.transparency);
+            ret.emplace("Face" + std::to_string(i + 1), elementColor);
+        }
         return ret;
+    }
+
+    std::string resolved;
+    if (Data::isMappedElement(element)) {
+        // A mapped name, from a saved override or another view provider:
+        // answer for the element it currently denotes.
+        const auto current = getRenderedShape().getElementName(element);
+        if (!current.index) {
+            return ret;
+        }
+        resolved = current.index.toString();
+        element = resolved.c_str();
     }
 
     if (boost::starts_with(element, "Face")) {
@@ -848,6 +913,353 @@ std::map<std::string, Base::Color> ViewProviderPartExt::getElementColors(const c
         }
     }
     return ret;
+}
+
+void ViewProviderPartExt::setElementColors(const std::map<std::string, Base::Color>& colors)
+{
+    // Colours ride on the material the element has now, or the base for a new
+    // override, so a colour edit keeps the rest of a library material's look
+    // while dropping its identity.
+    const auto existing = getElementAppearances();
+    std::map<std::string, App::Material> appearances;
+    for (const auto& [name, color] : colors) {
+        const auto it = existing.find(name);
+        App::Material material = it != existing.end() ? it->second : BaseAppearance.getValue();
+        material.diffuseColor = color;
+        material.diffuseColor.a = 1.0F;
+        material.transparency = color.transparency();
+        material.uuid.clear();
+        appearances[name] = material;
+    }
+    setElementAppearances(appearances);
+}
+
+std::map<std::string, App::Material> ViewProviderPartExt::getElementAppearances() const
+{
+    std::map<std::string, App::Material> result;
+    auto feature = freecad_cast<Part::Feature*>(getObject());
+    if (!feature) {
+        return result;
+    }
+    const auto& elements = feature->ColoredElements.getSubValues();
+    const auto& materials = MappedAppearance.getValues();
+    if (materials.size() < elements.size()) {
+        // The two halves of the store are saved separately, so a file can arrive
+        // with the element names but not their materials. Pairing them anyway
+        // would paint those elements with a default material, which is worse than
+        // showing no override at all.
+        return result;
+    }
+    for (std::size_t i = 0; i < elements.size(); ++i) {
+        result[elements[i]] = materials[i];
+    }
+    return result;
+}
+
+void ViewProviderPartExt::setElementAppearances(const std::map<std::string, App::Material>& appearances)
+{
+    if (!freecad_cast<Part::Feature*>(getObject())) {
+        return;
+    }
+    std::vector<std::string> elements;
+    std::vector<App::Material> materials;
+    for (const auto& [name, material] : appearances) {
+        if (name == "Face") {
+            if (!Part::sameMaterial(BaseAppearance.getValue(), material)) {
+                // Regenerated once below, not on this write.
+                Base::ObjectStatusLocker<App::Property::Status, App::Property> guard(
+                    App::Property::User3,
+                    &BaseAppearance
+                );
+                BaseAppearance.setValue(material);
+            }
+        }
+        else if (name == "Edge") {
+            LineColor.setValue(material.diffuseColor);
+        }
+        else if (name == "Vertex") {
+            PointColor.setValue(material.diffuseColor);
+        }
+        else {
+            elements.push_back(name);
+            materials.push_back(material);
+        }
+    }
+    writeElementAppearances(elements, materials);
+}
+
+void ViewProviderPartExt::writeElementAppearances(
+    const std::vector<std::string>& elements,
+    const std::vector<App::Material>& materials,
+    bool collapseWhenEmpty
+)
+{
+    auto feature = freecad_cast<Part::Feature*>(getObject());
+    if (!feature) {
+        return;
+    }
+    // A material list always keeps at least one entry, so an empty store leaves
+    // one material behind. The element list is what says how many overrides
+    // there are; every reader pairs the two and stops at the shorter.
+    const auto& current = MappedAppearance.getValues();
+    const bool sameMaterials = current.size() == materials.size()
+        && std::equal(current.begin(), current.end(), materials.begin(), Part::sameMaterial);
+    if (!sameMaterials) {
+        Base::ObjectStatusLocker<App::Property::Status, App::Property> guard(
+            App::Property::User3,
+            &MappedAppearance
+        );
+        MappedAppearance.setValues(materials);
+    }
+    const bool hadOverrides = !feature->ColoredElements.getSubValues().empty();
+    if (elements != feature->ColoredElements.getSubValues()) {
+        // Reaches regenerateAppearance() through updateData("ColoredElements").
+        if (elements.empty()) {
+            feature->ColoredElements.setValue(nullptr);
+        }
+        else {
+            feature->ColoredElements.setValue(feature, elements);
+        }
+    }
+    else {
+        regenerateAppearance();
+    }
+    if (elements.empty() && hadOverrides && collapseWhenEmpty) {
+        // The last override is gone. Regeneration leaves an unoverridden object's
+        // list alone, so collapse to the base here.
+        resetPositionalAppearance();
+    }
+    if (elements != feature->ColoredElements.getSubValues() || hadOverrides
+        || !elements.empty()) {
+        // Features built on this one inherit from its store, and nothing notifies
+        // them: the store is an output property, so it schedules no recompute.
+        refreshDependentAppearances();
+    }
+}
+
+void ViewProviderPartExt::refreshDependentAppearances()
+{
+    auto feature = freecad_cast<Part::Feature*>(getObject());
+    auto guiApplication = Gui::Application::Instance;
+    if (!feature || !guiApplication) {
+        return;
+    }
+    for (const auto object : feature->getDocument()->getObjects()) {
+        if (object == feature) {
+            continue;
+        }
+        auto other = freecad_cast<ViewProviderPartExt*>(guiApplication->getViewProvider(object));
+        if (other && other->MapFaceColor.getValue()) {
+            other->regenerateAppearance();
+        }
+    }
+}
+
+void ViewProviderPartExt::resetPositionalAppearance()
+{
+    const std::vector<App::Material> base {BaseAppearance.getValue()};
+    Base::FlagToggler<> guard(regeneratingAppearance, false);
+    ownsPositionalAppearance = false;
+    ShapeAppearance.setValues(base);
+    setHighlightedFaces(base);
+}
+
+namespace
+{
+
+/// True when any feature in the document has appearance overrides to inherit.
+bool anyElementOverrides(const App::Document* document)
+{
+    for (const auto object : document->getObjects()) {
+        auto feature = freecad_cast<const Part::Feature*>(object);
+        if (feature && !feature->ColoredElements.getSubValues().empty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+void ViewProviderPartExt::regenerateAppearance()
+{
+    auto feature = freecad_cast<Part::Feature*>(getObject());
+    if (regeneratingAppearance || !feature || !feature->getDocument() || isRestoring()) {
+        return;
+    }
+    auto doc = feature->getDocument();
+    if (doc->testStatus(App::Document::Restoring) || doc->isPerformingTransaction()) {
+        // Every property involved is restored or replayed on its own.
+        return;
+    }
+    // A store whose materials are shorter than its element names is unusable: see
+    // getElementAppearances(). Pairing it anyway would paint real elements with a
+    // default material.
+    const auto& ownElements = feature->ColoredElements.getSubValues();
+    const bool hasOwnOverrides =
+        !ownElements.empty() && MappedAppearance.getValues().size() >= ownElements.size();
+    // Reading an ancestor's store means walking the history of every face, so ask
+    // the cheap question first: has anything in this document been painted at all?
+    const bool mayInherit = MapFaceColor.getValue() && anyElementOverrides(feature->getDocument());
+    if (!hasOwnOverrides && !mayInherit) {
+        if (ownsPositionalAppearance) {
+            // The overrides this list was built from are gone.
+            resetPositionalAppearance();
+        }
+        // Otherwise nothing here owns the positional list. Other code writes one
+        // material per face deliberately, as a boolean does when it inherits its
+        // inputs' colour; leave that alone.
+        return;
+    }
+    Base::FlagToggler<> guard(regeneratingAppearance, false);
+
+    const auto shape = getRenderedShape();
+    auto overrides = hasOwnOverrides ? Part::resolveElementMaterials(
+                         feature,
+                         shape,
+                         feature->ColoredElements.getShadowSubs(),
+                         MappedAppearance.getValues(),
+                         TopAbs_FACE
+                     )
+                                     : Part::ElementMaterialMap {};
+    if (mayInherit) {
+        for (const auto& [index, material] : inheritedAppearances(shape, overrides)) {
+            overrides.emplace(index, material);
+        }
+    }
+    if (overrides.empty()) {
+        if (ownsPositionalAppearance) {
+            resetPositionalAppearance();
+        }
+        return;
+    }
+    const auto faces = shape.isNull() ? 0 : shape.countSubShapes(TopAbs_FACE);
+    const auto list = Part::buildPositionalMaterials(faces, BaseAppearance.getValue(), overrides);
+    ownsPositionalAppearance = true;
+    const auto& current = ShapeAppearance.getValues();
+    if (current.size() != list.size()
+        || !std::equal(current.begin(), current.end(), list.begin(), Part::sameMaterial)) {
+        ShapeAppearance.setValues(list);
+    }
+    // A write made from inside ShapeAppearance's own change handler is folded
+    // into the outer change and emits no second notification, so apply the
+    // result to the scene graph here rather than waiting for one.
+    setHighlightedFaces(list);
+}
+
+Part::ElementMaterialMap ViewProviderPartExt::inheritedAppearances(
+    const Part::TopoShape& shape,
+    const Part::ElementMaterialMap& own
+) const
+{
+    Part::ElementMaterialMap result;
+    auto feature = freecad_cast<Part::Feature*>(getObject());
+    auto guiApplication = Gui::Application::Instance;
+    if (!feature || !guiApplication || shape.isNull()) {
+        return result;
+    }
+    const auto faces = static_cast<int>(shape.countSubShapes(TopAbs_FACE));
+
+    // Each ancestor's overrides resolved to its own face indices, filled in as the
+    // walk first reaches that ancestor.
+    std::map<App::DocumentObject*, Part::ElementMaterialMap> ancestors;
+
+    for (int index = 1; index <= faces; ++index) {
+        if (own.count(index) != 0) {
+            continue;
+        }
+        const auto name = "Face" + std::to_string(index);
+        // Back through the features this face came from, nearest first. Each step
+        // carries the face's index in that feature's own shape.
+        for (const auto& step : Part::Feature::getElementHistory(feature, name.c_str(), true, true)) {
+            if (!step.obj || step.obj == feature || !step.index) {
+                continue;
+            }
+            auto known = ancestors.find(step.obj);
+            if (known == ancestors.end()) {
+                Part::ElementMaterialMap overrides;
+                auto source = freecad_cast<Part::Feature*>(step.obj);
+                auto sourceVp = freecad_cast<ViewProviderPartExt*>(
+                    guiApplication->getViewProvider(step.obj)
+                );
+                if (source && sourceVp && !source->ColoredElements.getSubValues().empty()) {
+                    overrides = Part::resolveElementMaterials(
+                        source,
+                        sourceVp->getRenderedShape(),
+                        source->ColoredElements.getShadowSubs(),
+                        sourceVp->MappedAppearance.getValues(),
+                        TopAbs_FACE
+                    );
+                }
+                known = ancestors.emplace(step.obj, std::move(overrides)).first;
+            }
+            if (known->second.empty()) {
+                continue;
+            }
+            const auto [type, sourceIndex] = Part::TopoShape::shapeTypeAndIndex(step.index);
+            if (type != TopAbs_FACE) {
+                continue;
+            }
+            const auto inherited = known->second.find(sourceIndex);
+            if (inherited != known->second.end()) {
+                result[index] = inherited->second;
+                break;
+            }
+        }
+    }
+    return result;
+}
+
+void ViewProviderPartExt::adoptPositionalAppearance()
+{
+    auto feature = freecad_cast<Part::Feature*>(getObject());
+    if (!feature || !feature->getDocument() || feature->getDocument()->isPerformingTransaction()) {
+        return;
+    }
+    const auto& list = ShapeAppearance.getValues();
+    if (list.empty()) {
+        return;
+    }
+    if (list.size() == 1) {
+        // One material for the whole shape: a new base. Overrides stay.
+        if (!Part::sameMaterial(BaseAppearance.getValue(), list.front())) {
+            Base::ObjectStatusLocker<App::Property::Status, App::Property> guard(
+                App::Property::User3,
+                &BaseAppearance
+            );
+            BaseAppearance.setValue(list.front());
+            regenerateAppearance();
+        }
+        return;
+    }
+    const auto shape = getRenderedShape();
+    if (shape.isNull() || list.size() != shape.countSubShapes(TopAbs_FACE)) {
+        // Stale for this shape: nothing reliable to adopt.
+        return;
+    }
+    auto derived = Part::deriveElementMaterials(list, TopAbs_FACE);
+    if (!Part::sameMaterial(BaseAppearance.getValue(), derived.base)) {
+        Base::ObjectStatusLocker<App::Property::Status, App::Property> guard(
+            App::Property::User3,
+            &BaseAppearance
+        );
+        BaseAppearance.setValue(derived.base);
+    }
+    if (derived.overrides.empty() && feature->ColoredElements.getSubValues().empty()) {
+        // A uniform list with nothing stored: leave it exactly as written. Its
+        // length is observable, and callers do write one material per face
+        // deliberately, as a boolean does when it inherits its inputs' colour.
+        return;
+    }
+    std::vector<std::string> elements;
+    std::vector<App::Material> materials;
+    for (const auto& [name, material] : derived.overrides) {
+        elements.push_back(name);
+        materials.push_back(material);
+    }
+    // The caller wrote a full per-face list on purpose. Keep it even when it
+    // leaves nothing to override, so the same write always leaves the same list.
+    writeElementAppearances(elements, materials, false);
 }
 
 void ViewProviderPartExt::unsetHighlightedFaces()
@@ -961,11 +1373,18 @@ void ViewProviderPartExt::updateData(const App::Property* prop)
             VisualTouched = true;
         }
 
+        // The face count may have changed: rebuild the positional appearance
+        // from the element overrides so every colour stays on its face.
+        regenerateAppearance();
+
         if (!VisualTouched) {
             if (this->faceset->partIndex.getNum() > this->pcShapeMaterial->diffuseColor.getNum()) {
                 this->pcFaceBind->value = SoMaterialBinding::OVERALL;
             }
         }
+    }
+    else if (propName && strcmp(propName, "ColoredElements") == 0) {
+        regenerateAppearance();
     }
     Gui::ViewProviderGeometryObject::updateData(prop);
 }
@@ -983,6 +1402,14 @@ void ViewProviderPartExt::finishRestoring()
     // be passed to the scene graph now.
     if (_diffuseColor.getSize() > 1) {
         onChanged(&_diffuseColor);
+    }
+    // Files written before element overrides existed carry per-face colours
+    // only in the positional list. Adopt them now, before a recompute can make
+    // the list stale. For every other object the base is what the list says.
+    if (auto feature = freecad_cast<Part::Feature*>(getObject())) {
+        if (feature->ColoredElements.getSubValues().empty()) {
+            adoptPositionalAppearance();
+        }
     }
     Gui::ViewProviderGeometryObject::finishRestoring();
 }

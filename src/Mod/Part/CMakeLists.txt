@@ -81,6 +81,7 @@ set(Part_tests
     parttests/ColorPerFaceTest.py
     parttests/ColorTransparencyTest.py
     parttests/TaskFaceAppearancesTest.py
+    parttests/ElementAppearanceTest.py
     parttests/TopoShapeTest.py
     parttests/TestTangentMode3-0.21.FCStd
     parttests/TestPartMirror.py
