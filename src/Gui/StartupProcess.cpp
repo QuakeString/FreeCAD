@@ -60,6 +60,8 @@
 #include <App/ApplicationDirectories.h>
 #include <memory>
 
+#include <QTimer>
+
 #include <Base/Console.h>
 #include <Base/StartupTimer.h>
 
@@ -584,18 +586,14 @@ void StartupPostProcess::activateWorkbench()
         mainWindow->loadWindowSettings();
     }
 
-    // Now run the background autoload, for workbenches that should be loaded at startup, but not
-    // displayed to the user immediately
-    {
-        Base::StartupTimer timer("  autoload modules");
+    // The workbenches to have ready are loaded once the event loop is running and the window
+    // has been drawn, so that the user gets the window at once and the loading happens while
+    // they decide what to do with it. Nothing is activated, so there is nothing to switch
+    // back from.
+    QTimer::singleShot(0, [wb = wb, this]() {
+        Base::StartupTimer timer("autoload modules (deferred)");
         autoloadModules(wb);
-    }
-
-    // Reactivate the startup workbench
-    {
-        Base::StartupTimer timer("  reactivate workbench");
-        guiApp.activateWorkbench(start.c_str());
-    }
+    });
 }
 
 void StartupPostProcess::setStyleSheet()
@@ -631,19 +629,21 @@ void StartupPostProcess::setStyleSheet()
 
 void StartupPostProcess::autoloadModules(const QStringList& wb)
 {
-    // Now run the background autoload, for workbenches that should be loaded at startup, but not
-    // displayed to the user immediately
+    // The workbenches the user asked to have ready at startup. They are loaded, which runs
+    // their Initialize() and so imports whatever they need, but not activated: activating
+    // each in turn would swap the toolbars and run the Activated hooks for workbenches the
+    // user is not looking at, and did so on the event loop after the window was up, which is
+    // what the user saw as a frozen window.
     std::string autoloadCSV = App::GetApplication()
                                   .GetParameterGroupByPath("User parameter:BaseApp/Preferences/General")
                                   ->GetASCII("BackgroundAutoloadModules", "");
 
-    // Tokenize the comma-separated list and load the requested workbenches if they exist in this
-    // installation
     std::stringstream stream(autoloadCSV);
     std::string workbench;
     while (std::getline(stream, workbench, ',')) {
         if (wb.contains(QString::fromLatin1(workbench.c_str()))) {
-            guiApp.activateWorkbench(workbench.c_str());
+            Base::StartupTimer timer(workbench.c_str());
+            guiApp.loadWorkbench(workbench.c_str());
         }
     }
 }

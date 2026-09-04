@@ -1863,6 +1863,58 @@ bool Application::setUserEditMode(const std::string& mode)
  * The old workbench gets deactivated before. If the workbench to the handler is already
  * active or if the switch fails false is returned.
  */
+bool Application::loadWorkbench(const char* name)
+{
+    Base::PyGILStateLocker lock;
+    PyObject* pcWorkbench = PyDict_GetItemString(_pcWorkbenchDictionary, name);
+    if (!pcWorkbench) {
+        return false;
+    }
+
+    try {
+        Py::Object handler(pcWorkbench);
+        if (handler.hasAttr(std::string("__Workbench__"))) {
+            return true;  // Initialize() has already run
+        }
+
+        // The same steps activateWorkbench takes before it activates anything: find out the
+        // workbench class, instantiate it, and let Initialize() import what it needs.
+        std::string type;
+        Py::Callable method(handler.getAttr(std::string("GetClassName")));
+        Py::Tuple args;
+        Py::String result(method.apply(args));
+        type = result.as_std_string("ascii");
+        if (Base::Type::fromName(type.c_str())
+                .isDerivedFrom(Gui::PythonBaseWorkbench::getClassTypeId())) {
+            Workbench* wb = WorkbenchManager::instance()->createWorkbench(name, type);
+            if (!wb) {
+                throw Py::RuntimeError("Failed to instantiate workbench of type " + type);
+            }
+            handler.setAttr(std::string("__Workbench__"), Py::Object(wb->getPyObject(), true));
+        }
+
+        Py::Callable initialize(handler.getAttr(std::string("Initialize")));
+        initialize.apply(args);
+
+        // A C++ workbench only exists once its module is loaded, which Initialize() did
+        if (!handler.hasAttr(std::string("__Workbench__"))) {
+            if (Workbench* wb = WorkbenchManager::instance()->getWorkbench(name)) {
+                handler.setAttr(std::string("__Workbench__"), Py::Object(wb->getPyObject(), true));
+            }
+        }
+        return true;
+    }
+    catch (Py::Exception&) {
+        Base::PyException e;
+        Base::Console().error("%s\n", e.what());
+        return false;
+    }
+    catch (const Base::Exception& e) {
+        Base::Console().error("%s\n", e.what());
+        return false;
+    }
+}
+
 bool Application::activateWorkbench(const char* name)
 {
     bool ok = false;

@@ -239,6 +239,13 @@ public:
     //@{
     /// Activate a named workbench
     bool activateWorkbench(const char* name);
+    /** Loads a workbench without activating it.
+     * Runs the workbench's Initialize(), which is where its commands are created and its
+     * modules imported, so that a later activation is quick. Nothing visible changes: the
+     * active workbench, its toolbars and the Activated hooks are all left alone.
+     * @return true if the workbench is loaded afterwards, whether by this call or before it
+     */
+    bool loadWorkbench(const char* name);
     QPixmap workbenchIcon(const QString&) const;
     QString workbenchToolTip(const QString&) const;
     QString workbenchMenuText(const QString&) const;
