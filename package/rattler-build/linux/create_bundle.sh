@@ -36,6 +36,21 @@ rm -rf ${conda_env}/bin_tmp
 
 sed -i '1s|.*|#!/usr/bin/env python|' ${conda_env}/bin/pip
 
+# The bundled fonts.conf carries the absolute paths of the machine that built it, and an
+# AppImage is mounted somewhere new on every launch. Its own font directory is expressed
+# relative to the configuration file, and the cache - which has to be writable - is sent to
+# the user's cache directory rather than into the read-only image.
+echo -e "\nMake the font configuration relocatable"
+build_prefix="$(realpath ../.pixi/envs/default)"
+sed -i \
+  -e "s|<dir>${build_prefix}/fonts</dir>|<dir prefix=\"relative\">../../fonts</dir>|" \
+  -e "s|<cachedir>${build_prefix}/var/cache/fontconfig</cachedir>|<cachedir prefix=\"xdg\">fontconfig/freecad-appimage</cachedir>|" \
+  ${conda_env}/etc/fonts/fonts.conf
+if grep -q "${build_prefix}" ${conda_env}/etc/fonts/fonts.conf; then
+    echo "fonts.conf still refers to the build machine:"; grep -n "${build_prefix}" ${conda_env}/etc/fonts/fonts.conf
+    exit 1
+fi
+
 echo -e "\nCopying Icon and Desktop file"
 cp ${conda_env}/share/applications/org.freecad.FreeCAD.desktop AppDir/
 sed -i 's/Exec=FreeCAD/Exec=AppRun/g' AppDir/org.freecad.FreeCAD.desktop

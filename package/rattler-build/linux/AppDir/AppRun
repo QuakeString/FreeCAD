@@ -6,8 +6,12 @@ export PYTHONHOME=${HERE}/usr
 export PATH_TO_FREECAD_LIBDIR=${HERE}/usr/lib
 # export QT_QPA_PLATFORM_PLUGIN_PATH=${HERE}/usr/plugins
 # export QT_XKB_CONFIG_ROOT=${HERE}/usr/lib
-export FONTCONFIG_FILE=/etc/fonts/fonts.conf
-export FONTCONFIG_PATH=/etc/fonts
+# The bundled fontconfig is older than the one on a current host, and reading the host's
+# configuration with it produces a warning for every directive it does not understand. Use
+# the bundled configuration instead: it still searches the host's font directories, so the
+# user's installed fonts are all available.
+export FONTCONFIG_FILE=${HERE}/usr/etc/fonts/fonts.conf
+export FONTCONFIG_PATH=${HERE}/usr/etc/fonts
 
 # Default to X11, which is the better tested path, but let a caller pick the platform -
 # a Wayland session can be asked for with QT_QPA_PLATFORM=wayland.
