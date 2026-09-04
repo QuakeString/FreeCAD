@@ -37,6 +37,7 @@
 
 from enum import IntEnum, Enum
 from dataclasses import dataclass
+import time
 import traceback
 import typing
 import re
@@ -495,21 +496,31 @@ def InitApplications():
 
     Log("Init:   Searching modules\n")
 
+    # Every module's InitGui.py runs here, on the GUI thread, before the first window can be
+    # drawn. A slow one is felt as a slow start by everybody, so each is timed and the summary
+    # table names the cost so that the offender can be found without guesswork.
+    timings: list[tuple[float, str]] = []
+
     def mod_gui_init(kind: str, mod_type: type, output: list[str]) -> None:
         for mod in App.__ModCache__:
             if mod.kind == kind:
+                elapsed = 0.0
                 if mod.state == ModState.Loaded:
+                    started = time.perf_counter()
                     gui = mod_type(mod)
                     gui.load()
+                    elapsed = time.perf_counter() - started
+                    timings.append((elapsed, mod.name))
                 if mod.init_mode:
                     row = (
-                        f"| {mod.name:<24.24} | {mod.state.name:<10.10} | {mod.init_mode:<6.6} |\n"
+                        f"| {mod.name:<24.24} | {mod.state.name:<10.10} | {mod.init_mode:<6.6}"
+                        f" | {elapsed * 1000.0:>8.1f} |\n"
                     )
                     output.append(row)
 
     output = []
-    output.append(f"+-{'--':-<24}-+-{'--------':-<10}-+-{'---':-<6}-+\n")
-    output.append(f"| {'Mod':<24} | {'Gui State':<10} | {'Mode':<6} |\n")
+    output.append(f"+-{'--':-<24}-+-{'--------':-<10}-+-{'---':-<6}-+-{'---':-<8}-+\n")
+    output.append(f"| {'Mod':<24} | {'Gui State':<10} | {'Mode':<6} | {'ms':>8} |\n")
     output.append(output[0])
 
     mod_gui_init("Dir", DirModGui, output)
@@ -522,6 +533,18 @@ def InitApplications():
     for line in output:
         Log(line)
     Log(output[0])
+
+    # The total is what the user waits for. Anything taking a good share of it is worth a
+    # line of its own: it is almost always an import that could wait until the workbench is
+    # first activated.
+    total = sum(elapsed for elapsed, _ in timings)
+    Log(f"Init: GUI initialization of all modules took {total * 1000.0:.0f} ms\n")
+    slow = sorted((t for t in timings if t[0] >= 0.25), reverse=True)
+    for elapsed, name in slow:
+        Msg(
+            f"Startup: {name} took {elapsed * 1000.0:.0f} ms to initialize its GUI"
+            f" ({elapsed / total * 100.0:.0f}% of module initialization)\n"
+        )
 
 
 def GeneratePackageIcon(
