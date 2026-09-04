@@ -269,6 +269,17 @@ class ElementAppearanceGuiTest(unittest.TestCase):
         self.assertEqual(rgb(self.vo.PointColor), rgb(BLUE))
         self.assertEqual(self.stored(), [])
 
+    def testAnUnpaintedObjectStoresNothing(self):
+        # An empty store must stay empty: a material list that holds one default
+        # material is written into every saved file for no reason.
+        self.assertEqual(self.stored(), [])
+        self.assertEqual(len(self.vo.MappedAppearance), 0)
+
+        self._save_and_reopen()
+
+        self.assertEqual(self.stored(), [])
+        self.assertEqual(len(self.vo.MappedAppearance), 0)
+
     def testClearingOverrides(self):
         self.paint(self.top())
 

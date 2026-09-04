@@ -201,6 +201,9 @@ ViewProviderPartExt::ViewProviderPartExt()
         App::PropertyType(App::Prop_Hidden | App::Prop_ReadOnly),
         "One appearance per element listed in the object's ColoredElements property."
     );
+    // A material list is created holding one default material. Empty it, so an
+    // object that has no overrides writes no appearance file when it is saved.
+    MappedAppearance.setSize(0);
     ADD_PROPERTY_TYPE(
         MapFaceColor,
         (false),
