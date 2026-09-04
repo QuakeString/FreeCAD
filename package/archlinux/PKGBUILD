@@ -1,0 +1,152 @@
+# Maintainer: George Rawlinson <grawlinson@archlinux.org>
+# Maintainer: Caleb Maclennan <caleb@alerque.com>
+# Contributor: Alexander F. Rødseth <xyproto@archlinux.org>
+# Contributor: Sven-Hendrik Haase <svenstaro@archlinux.org>
+# Contributor: loqs <bugs-archlinux@entropy-collector.net>
+# Contributor: Gabriel Souza Franco <gabrielfrancosouza@gmail.com>
+# Contributor: Florian Pritz
+# Contributor: Jonas Heinrich <onny@project-insanity.org>
+# Contributor: Jordi De Groof <jordi.degroof@gmail.com>
+# Contributor: mickele
+# Contributor: manwithgrenade
+# Contributor: bricem13
+# Contributor: gborzi
+# Contributor: Adrian Insaurralde
+# Contributor: Martin Rodriguez Reboredo
+# Contributor: Jamin Collins
+
+pkgname=freecad-auto-theme
+_upstream=freecad
+pkgver=26.3.0.dev
+pkgrel=1
+pkgdesc='FreeCAD development build from the feature/auto-theme branch (system theme following, selection on top, faster startup)'
+arch=(x86_64)
+url='https://github.com/QuakeString/FreeCAD'
+license=(LGPL-2.0-only)
+provides=(freecad)
+conflicts=(freecad)
+depends=(
+  boost-libs
+  coin
+  fmt
+  freetype2
+  glew
+  glibc
+  hicolor-icon-theme
+  icu
+  libgcc
+  libgomp
+  libspnav
+  libstdc++
+  med
+  opencascade
+  openmpi
+  pugixml
+  pybind11
+  pyside6
+  python
+  python-defusedxml
+  python-matplotlib
+  python-numpy
+  python-packaging
+  python-pip
+  python-pivy
+  python-ply
+  python-typing_extensions
+  python-yaml
+  qt6-base
+  qt6-svg
+  qt6-tools
+  shiboken6
+  verdict
+  vtk
+  xerces-c
+  yaml-cpp
+  zlib
+)
+makedepends=(
+  boost
+  cgns
+  cmake
+  dos2unix
+  eigen
+  fast_float
+  git
+  libharu
+  liblas
+  microsoft-gsl
+  ninja
+  nlohmann-json
+  openvdb
+  openvr
+  ospray
+  pdal
+  postgresql-libs
+  python-mpi4py
+  swig
+  utf8cpp
+)
+optdepends=(
+  'graphviz: dependency graph support'
+  'opencamlib: CAM workbench support'
+  'openscad: OpenSCAD support'
+  'python-ladybug-core: Solar/Wind diagram support'
+)
+options=(!lto)
+source=("FreeCAD::git+https://github.com/QuakeString/FreeCAD.git#branch=feature/auto-theme")
+sha512sums=(SKIP)
+b2sums=(SKIP)
+
+prepare() {
+  cd FreeCAD
+  # Arch's own package backports the coin 4.0.10 regex fix (upstream #30899) here;
+  # this branch already carries it.
+  git submodule update --init --recursive
+}
+
+build() {
+  local cmake_options=(
+    -B build
+    -S FreeCAD
+    -D BUILD_FLAT_MESH=ON
+    -D BUILD_DESIGNER_PLUGIN=ON
+    -D CMAKE_BUILD_TYPE=Release
+    -D ENABLE_DEVELOPER_TESTS=OFF
+    -D CMAKE_C_FLAGS="$CFLAGS -ffat-lto-objects -fPIC -w"
+    -D CMAKE_CXX_FLAGS="$CXXFLAGS -ffat-lto-objects -fPIC -w"
+    -D CMAKE_INSTALL_BINDIR=/usr/lib/freecad/bin
+    -D CMAKE_INSTALL_DATADIR=/usr/share/freecad
+    -D CMAKE_INSTALL_DATAROOTDIR=/usr/share
+    -D CMAKE_INSTALL_DOCDIR=/usr/share/freecad/doc
+    -D CMAKE_INSTALL_LIBDIR=/usr/lib/freecad/lib
+    -D CMAKE_INSTALL_PREFIX=/usr/lib/freecad
+    -D FREECAD_USE_EXTERNAL_PIVY=ON
+    -D FREECAD_USE_QT_FILEDIALOG=ON
+    -D FREECAD_QT_VERSION=6
+    -D INSTALL_TO_SITEPACKAGES=ON
+    -D PACKAGE_WCURL=https://github.com/QuakeString/FreeCAD
+    -D PYTHON_EXECUTABLE=/usr/bin/python
+    -G Ninja
+    -W no-dev
+  )
+
+  cmake "${cmake_options[@]}"
+
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  # tools
+  cd FreeCAD
+  install -Dm755 src/Tools/fcinfo -t "$pkgdir/usr/bin"
+
+  # symlinks
+  install -d "$pkgdir/usr/bin"
+  ln -sf /usr/lib/freecad/bin/FreeCAD "$pkgdir/usr/bin/freecad"
+  ln -sf /usr/lib/freecad/bin/FreeCAD "$pkgdir/usr/bin/FreeCAD"
+  ln -sf /usr/lib/freecad/bin/FreeCADCmd "$pkgdir/usr/bin/freecadcmd"
+  ln -sf /usr/lib/freecad/bin/FreeCADCmd "$pkgdir/usr/bin/FreeCADCmd"
+  ln -sf /usr/lib/freecad/bin/freecad-thumbnailer "$pkgdir/usr/bin/freecad-thumbnailer"
+}
