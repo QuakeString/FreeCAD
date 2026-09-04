@@ -236,7 +236,15 @@ void StartupPostProcess::execute()
     loadOpenInventor();
     setBranding();
     showMainWindow();
-    activateWorkbench();
+    try {
+        activateWorkbench();
+    }
+    catch (...) {
+        // Whatever went wrong, the splasher must not be left covering the screen
+        mainWindow->stopSplasher();
+        throw;
+    }
+    mainWindow->stopSplasher();
     checkParameters();
     checkVersionMigration();
 }
@@ -468,9 +476,10 @@ void StartupPostProcess::showMainWindow()
         throw;
     }
 
-    // stop splash screen and set immediately the active window that may be of interest
-    // for scripts using Python binding for Qt
-    mainWindow->stopSplasher();
+    // The splasher is left up until the workbench has been activated, see execute(). The main
+    // window is shown part way through that, and the workbenches loaded after it is shown block
+    // the event loop, so dismissing the splasher here leaves an unpainted window on screen for
+    // as long as those take.
     mainWindow->activateWindow();
 }
 
