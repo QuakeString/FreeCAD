@@ -26,6 +26,7 @@
 
 #include <App/FeaturePython.h>
 #include <App/GeoFeature.h>
+#include <App/PropertyLinks.h>
 #include <Mod/Material/App/PropertyMaterial.h>
 #include <Mod/Part/PartGlobal.h>
 #include <Base/Bitmask.h>
@@ -75,6 +76,17 @@ public:
 
     PropertyPartShape Shape;
     Materials::PropertyMaterial ShapeMaterial;
+
+    /** Elements that carry an appearance override.
+     *
+     * Links to the feature itself and lists the elements ("Face2", or a mapped element
+     * name once resolved) whose appearance a view provider stores beside the positional
+     * ShapeAppearance list. As a hidden link it adds no dependency. As an element reference
+     * it is re-resolved by name and geometry whenever the shape changes, which is what lets
+     * the override follow its face through a topology change instead of sticking to an
+     * index.
+     */
+    App::PropertyLinkSubHidden ColoredElements;
 
     /** @name methods override feature */
     //@{

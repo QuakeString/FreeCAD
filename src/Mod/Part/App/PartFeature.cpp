@@ -97,6 +97,13 @@ Feature::Feature()
     ADD_PROPERTY(Shape, (TopoDS_Shape()));
     auto mat = Materials::MaterialManager::defaultMaterial();
     ADD_PROPERTY(ShapeMaterial, (*mat));
+    ADD_PROPERTY_TYPE(
+        ColoredElements,
+        (nullptr),
+        "",
+        App::PropertyType(App::Prop_Hidden | App::Prop_ReadOnly | App::Prop_Output),
+        "Elements whose appearance is stored per element rather than per index"
+    );
 }
 
 Feature::~Feature() = default;

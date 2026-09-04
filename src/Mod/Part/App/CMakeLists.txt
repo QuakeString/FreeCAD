@@ -223,6 +223,8 @@ SET(Features_SRCS
     PartFeatures.h
     PartFeature.cpp
     PartFeature.h
+    ElementAppearance.cpp
+    ElementAppearance.h
     PartFeatureReference.cpp
     PartFeatureReference.h
     Part2DObject.cpp
