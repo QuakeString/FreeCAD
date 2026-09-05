@@ -94,7 +94,8 @@ optdepends=(
   'python-ladybug-core: Solar/Wind diagram support'
 )
 options=(!lto)
-source=("FreeCAD::git+https://github.com/QuakeString/FreeCAD.git#branch=feature/auto-theme")
+_branch=feature/durable-colors
+source=("FreeCAD::git+https://github.com/QuakeString/FreeCAD.git#branch=${_branch}")
 sha512sums=(SKIP)
 b2sums=(SKIP)
 

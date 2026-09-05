@@ -24,7 +24,9 @@ docker run --rm \
     echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
     cp -r /pkg /home/builder/pkg
     # Point the PKGBUILD at the mounted repository instead of the fork on GitHub
-    sed -i "s|git+https://github.com/QuakeString/FreeCAD.git#branch=feature/auto-theme|git+file:///src#branch=feature/auto-theme|" /home/builder/pkg/PKGBUILD
+    # Clone from the repository mounted at /src rather than GitHub: the same commits,
+    # without a 2.8 GB download. The branch the PKGBUILD names is kept.
+    sed -i "s|git+https://github.com/QuakeString/FreeCAD.git#branch=|git+file:///src#branch=|" /home/builder/pkg/PKGBUILD
     git config --global --add safe.directory /src
     chown -R builder:builder /home/builder/pkg
     cd /home/builder/pkg
