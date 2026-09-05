@@ -24,6 +24,7 @@ setup_qt_test(ObjectSelection)
 setup_qt_test(SelectionOnTop)
 setup_qt_test(WorkbenchLoading)
 setup_qt_test(QuantitySpinBox)
+setup_qt_test(ActionGroupTest)
 
 target_link_libraries(Gui_tests_run PRIVATE
     GTest::gmock_main

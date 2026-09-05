@@ -554,8 +554,12 @@ int ActionGroup::checkedAction() const
 
 void ActionGroup::setCheckedAction(int index)
 {
-    auto acts = groupAction()->actions();
-    QAction* act = acts.at(index);
+    // Callers pass an index from saved settings or from a command that may not have
+    // been populated yet, so it can name an action that does not exist.
+    QAction* act = groupAction()->actions().value(index);
+    if (!act) {
+        return;
+    }
     act->setChecked(true);
     this->setIcon(act->icon());
 

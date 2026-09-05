@@ -85,15 +85,17 @@ void DlgSettingsFemGeneralImp::saveSettings()
 
     ui->cmb_def_solver->onSave();
 
-    // set default solver icon
+    // Set the default solver icon. A command builds its action the first time it is
+    // put into a menu or toolbar, so there is none until the FEM workbench has been
+    // activated, while the preferences dialog saves every page it has loaded.
     Gui::CommandManager& cmdMgr = Gui::Application::Instance->commandManager();
     Gui::Command* cmd = cmdMgr.getCommandByName("FEM_CompSolvers");
     if (cmd) {
-        auto action = static_cast<Gui::ActionGroup*>(cmd->getAction());
-
-        ParameterGrp::handle hGrp = ui->cmb_def_solver->getWindowParameter();
-        int index = hGrp->GetInt(ui->cmb_def_solver->entryName(), 0);
-        action->setCheckedAction(index > 0 ? index - 1 : 0);
+        if (auto action = qobject_cast<Gui::ActionGroup*>(cmd->getAction())) {
+            ParameterGrp::handle hGrp = ui->cmb_def_solver->getWindowParameter();
+            int index = hGrp->GetInt(ui->cmb_def_solver->entryName(), 0);
+            action->setCheckedAction(index > 0 ? index - 1 : 0);
+        }
     }
 }
 
